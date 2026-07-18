@@ -64,7 +64,7 @@ const departamentos = Object.keys(porDepartamento);
                 <h3 class="text-base font-medium text-neutral-700 capitalize mb-4">
                   {cat}
                 </h3>
-                <div class="flex gap-4 overflow-x-auto snap-x pb-2 -mx-1 px-1">
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
                   {porDepartamento[depto][cat].map((producto: any) => (
                     <div
                       class="producto-item"
