@@ -19,14 +19,15 @@ export default defineType({
       validation: (Rule) => Rule.required(),
     }),
     defineField({
-      name: 'departamento',
-      title: 'Departamento',
-      type: 'string',
-      options: {
-        list: ['bebes', 'herramientas', 'bath-body', 'perfumes'],
-      },
-      validation: (Rule) => Rule.required(),
-    }),
+  name: 'departamento',
+  title: 'Departamento',
+  type: 'string',
+  options: {
+    list: ['bebes', 'herramientas', 'bath-body', 'perfumes', 'juguetes'],
+  },
+  validation: (Rule) => Rule.required(),
+}),
+
     defineField({
       name: 'imagen',
       title: 'Imagen',

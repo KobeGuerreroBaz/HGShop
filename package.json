@@ -12,10 +12,12 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@sanity/client": "^7.23.2",
     "@sanity/image-url": "^2.1.1",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.1.1",
+    "dotenv": "^17.4.2",
     "tailwindcss": "^4.3.3"
   }
 }
