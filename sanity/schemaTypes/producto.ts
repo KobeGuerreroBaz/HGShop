@@ -22,7 +22,13 @@ export default defineType({
       name: 'precio',
       title: 'Precio',
       type: 'number',
-      validation: (Rule) => Rule.required().positive(),
+      validation: (Rule) => Rule.positive(),
+    }),
+    defineField({
+      name: 'cantidadDisponible',
+      title: 'Cantidad disponible (control interno, no se muestra al cliente)',
+      type: 'number',
+      validation: (Rule) => Rule.min(0),
     }),
     defineField({
       name: 'estado',
@@ -42,6 +48,12 @@ export default defineType({
       type: 'image',
       options: { hotspot: true },
       validation: (Rule) => Rule.required(),
+    }),
+    defineField({
+      name: 'galeria',
+      title: 'Galería (fotos adicionales)',
+      type: 'array',
+      of: [{ type: 'image', options: { hotspot: true } }],
     }),
     defineField({
       name: 'categoria',
@@ -81,4 +93,21 @@ export default defineType({
       type: 'string',
     }),
   ],
+  preview: {
+    select: {
+      title: 'titulo',
+      precio: 'precio',
+      cantidad: 'cantidadDisponible',
+      media: 'imagenPrincipal',
+    },
+    prepare({ title, precio, cantidad, media }) {
+      const precioTexto = precio ? `$${precio} MXN` : '⚠️ SIN PRECIO';
+      const cantidadTexto = cantidad !== undefined ? cantidad : '⚠️ SIN CANTIDAD';
+      return {
+        title,
+        subtitle: `${precioTexto} · Stock: ${cantidadTexto}`,
+        media,
+      };
+    },
+  },
 });

@@ -1,0 +1,176 @@
+---
+import { sanityClient } from '../../lib/sanity';
+import Layout from '../../layouts/Layout.astro';
+import MenuHamburguesa from '../../components/MenuHamburguesa.astro';
+import ProductCard from '../../components/ProductCard.astro';
+
+export async function getStaticPaths() {
+  const departamentos = await sanityClient.fetch(`
+    array::unique(*[_type == "categoria" && defined(departamento)].departamento)
+  `);
+
+  return departamentos.map((depto: string) => ({
+    params: { departamento: depto },
+  }));
+}
+
+const { departamento } = Astro.params;
+
+const todosDepartamentos = await sanityClient.fetch(`
+  array::unique(*[_type == "categoria" && defined(departamento)].departamento)
+`);
+
+const productos = await sanityClient.fetch(
+  `*[_type == "producto" && defined(categoria) && categoria->departamento == $departamento]{
+    "slug": slug.current,
+    titulo,
+    precio,
+    descripcion,
+    imagenPrincipal,
+    edicion,
+    palabrasClave,
+    "categoriaTitulo": categoria->titulo
+  }`,
+  { departamento }
+);
+
+const porCategoria = productos.reduce((acc: any, producto: any) => {
+  const cat = producto.categoriaTitulo || 'Sin categoría';
+  if (!acc[cat]) acc[cat] = [];
+  acc[cat].push(producto);
+  return acc;
+}, {});
+
+const categorias = Object.keys(porCategoria);
+const LIMITE_INICIAL = 2;
+const nombreDepartamento = departamento.replace(/-/g, ' ');
+---
+<Layout titulo={`${nombreDepartamento} - HG Shop MX`}>
+  <MenuHamburguesa departamentos={todosDepartamentos} />
+
+  <section class="px-6 py-12 text-center max-w-2xl mx-auto">
+    <a href="/" class="text-sm text-neutral-500 hover:text-neutral-900">&larr; Volver al inicio</a>
+    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900 capitalize">
+      {nombreDepartamento}
+    </h1>
+
+    <div class="mt-6">
+      <input
+        type="text"
+        id="buscador"
+        placeholder={`Buscar en ${nombreDepartamento}...`}
+        class="w-full rounded-full border border-neutral-200 px-6 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+      />
+    </div>
+  </section>
+
+  <main class="px-6 pb-20 max-w-5xl mx-auto space-y-10">
+    {categorias.map((cat) => {
+      const productosDeCategoria = porCategoria[cat];
+      const hayExtras = productosDeCategoria.length > LIMITE_INICIAL;
+      return (
+        <div class="categoria-contenedor" data-categoria={cat} data-expandido="false">
+          <h3 class="text-base font-medium text-neutral-700 capitalize mb-4">{cat}</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
+            {productosDeCategoria.map((producto: any, index: number) => (
+              <div
+                class={`producto-item ${index >= LIMITE_INICIAL ? 'producto-extra' : ''}`}
+                style={index >= LIMITE_INICIAL ? 'display: none;' : ''}
+                data-buscable={`${producto.titulo} ${(producto.palabrasClave || []).join(' ')}`.toLowerCase()}
+              >
+                <ProductCard
+                  slug={producto.slug}
+                  titulo={producto.titulo}
+                  precio={producto.precio}
+                  imagenPrincipal={producto.imagenPrincipal}
+                  descripcion={producto.descripcion}
+                  edicion={producto.edicion}
+                />
+              </div>
+            ))}
+          </div>
+          {hayExtras && (
+            <button
+              type="button"
+              class="boton-ver-mas mt-4 text-sm font-medium text-neutral-700 hover:text-neutral-900 underline"
+              data-texto-ver-mas={`Ver más (${productosDeCategoria.length - LIMITE_INICIAL} más)`}
+              data-texto-ver-menos="Ver menos"
+            >
+              Ver más ({productosDeCategoria.length - LIMITE_INICIAL} más)
+            </button>
+          )}
+        </div>
+      );
+    })}
+
+    {categorias.length === 0 && (
+      <p class="text-center text-neutral-400">Todavía no hay productos en este departamento.</p>
+    )}
+  </main>
+</Layout>
+
+<script>
+  const input = document.getElementById('buscador') as HTMLInputElement;
+
+  document.querySelectorAll<HTMLButtonElement>('.boton-ver-mas').forEach((boton) => {
+    boton.addEventListener('click', () => {
+      const contenedor = boton.closest('.categoria-contenedor') as HTMLElement;
+      if (!contenedor) return;
+
+      const estaExpandido = contenedor.dataset.expandido === 'true';
+      const nuevoEstado = !estaExpandido;
+      contenedor.dataset.expandido = nuevoEstado ? 'true' : 'false';
+
+      contenedor.querySelectorAll<HTMLElement>('.producto-extra').forEach((item) => {
+        item.style.display = nuevoEstado ? '' : 'none';
+      });
+
+      boton.textContent = nuevoEstado
+        ? boton.dataset.textoVerMenos || 'Ver menos'
+        : boton.dataset.textoVerMas || 'Ver más';
+
+      if (!nuevoEstado) {
+        contenedor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  });
+
+  input?.addEventListener('input', () => {
+    const query = input.value.trim().toLowerCase();
+    const hayBusqueda = query !== '';
+
+    const contenedores = document.querySelectorAll<HTMLElement>('.categoria-contenedor');
+
+    contenedores.forEach((contenedor) => {
+      const expandido = contenedor.dataset.expandido === 'true';
+      const items = contenedor.querySelectorAll<HTMLElement>('.producto-item');
+      const boton = contenedor.querySelector<HTMLButtonElement>('.boton-ver-mas');
+
+      items.forEach((item) => {
+        const texto = item.dataset.buscable || '';
+        const esExtra = item.classList.contains('producto-extra');
+
+        if (hayBusqueda) {
+          const coincide = texto.includes(query);
+          item.style.display = coincide ? '' : 'none';
+        } else {
+          if (esExtra && !expandido) {
+            item.style.display = 'none';
+          } else {
+            item.style.display = '';
+          }
+        }
+      });
+
+      if (boton) {
+        boton.style.display = hayBusqueda ? 'none' : '';
+      }
+    });
+
+    const categorias = document.querySelectorAll<HTMLElement>('[data-categoria]');
+    categorias.forEach((cat) => {
+      const visibles = cat.querySelectorAll<HTMLElement>('.producto-item:not([style*="display: none"])');
+      cat.style.display = visibles.length > 0 ? '' : 'none';
+    });
+  });
+</script>

@@ -1,9 +1,12 @@
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import readline from 'readline';
+import sharp from 'sharp';
+import { exec } from 'child_process';
 import { createClient } from '@sanity/client';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
 const client = createClient({
   projectId: process.env.SANITY_PROJECT_ID,
@@ -20,6 +23,36 @@ function preguntar(texto) {
   return new Promise((resolve) => rl.question(texto, resolve));
 }
 
+function abrirFotoEnVistaPrevia(rutaCompleta) {
+  exec(`open "${rutaCompleta}"`, (error) => {
+    if (error) console.log('  (No se pudo abrir la vista previa automaticamente, no es grave)');
+  });
+}
+
+const ESQUEMA_RESPUESTA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    titulo: { type: SchemaType.STRING },
+    marca: { type: SchemaType.STRING, nullable: true },
+    descripcion: { type: SchemaType.STRING },
+    palabrasClave: {
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
+    },
+    edadRecomendada: { type: SchemaType.STRING, nullable: true },
+    capacidad: { type: SchemaType.STRING, nullable: true },
+    edicion: { type: SchemaType.STRING, nullable: true },
+  },
+  required: ['titulo', 'descripcion', 'palabrasClave'],
+};
+
+const PROMPT_ANALISIS = `Analiza esta foto de un producto de venta y completa los campos del esquema.
+
+Reglas importantes:
+- descripcion: basala unicamente en lo que se ve o lee con certeza; si no estas seguro de un material o detalle especifico, no lo menciones.
+- palabrasClave: usa 5 a 8 terminos ESPECIFICOS que un cliente usaria para buscar este producto exacto (marca, modelo, color, personaje, coleccion, caracteristica distintiva). NO incluyas palabras genericas de categoria como "juguete", "producto", "articulo", "accesorio".
+- Los campos marca, edadRecomendada, capacidad y edicion deben ser null si no aplican o no son visibles.`;
+
 function generarSlug(texto) {
   return texto
     .toLowerCase()
@@ -29,9 +62,47 @@ function generarSlug(texto) {
     .replace(/(^-|-$)/g, '');
 }
 
-const EXTENSIONES_VALIDAS = ['.jpg', '.jpeg', '.png', '.webp'];
+function sufijoUnico(assetId) {
+  return assetId.replace(/[^a-z0-9]/gi, '').slice(-8).toLowerCase();
+}
 
-// Agrupa archivos como "taladro-1.jpg", "taladro-2.jpg" bajo la clave "taladro"
+function calcularHash(buffer) {
+  return crypto.createHash('sha1').update(buffer).digest('hex');
+}
+
+async function redimensionarParaAnalisis(buffer) {
+  return sharp(buffer)
+    .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
+async function comprimirParaSubida(buffer) {
+  return sharp(buffer)
+    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+}
+
+const EXTENSIONES_VALIDAS = ['.jpg', '.jpeg', '.png', '.webp'];
+const CARPETA_YA_SUBIDO = 'ya-subido';
+const NOMBRE_MANIFIESTO = '.ya-procesados.json';
+
+function cargarManifiesto(rutaCarpeta) {
+  const rutaManifiesto = path.join(rutaCarpeta, NOMBRE_MANIFIESTO);
+  if (!fs.existsSync(rutaManifiesto)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(rutaManifiesto, 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
+function guardarManifiesto(rutaCarpeta, manifiesto) {
+  const rutaManifiesto = path.join(rutaCarpeta, NOMBRE_MANIFIESTO);
+  fs.writeFileSync(rutaManifiesto, JSON.stringify(manifiesto, null, 2));
+}
+
 function agruparPorProducto(archivos) {
   const grupos = {};
 
@@ -53,7 +124,6 @@ function agruparPorProducto(archivos) {
     grupos[clave].push({ archivo, orden });
   }
 
-  // Ordenamos las fotos de cada grupo por su numero
   for (const clave in grupos) {
     grupos[clave].sort((a, b) => a.orden - b.orden);
   }
@@ -61,66 +131,88 @@ function agruparPorProducto(archivos) {
   return grupos;
 }
 
-async function subirImagen(rutaCompleta) {
-  const buffer = fs.readFileSync(rutaCompleta);
-  const asset = await client.assets.upload('image', buffer, {
+async function subirImagenComprimida(rutaCompleta) {
+  const bufferOriginal = fs.readFileSync(rutaCompleta);
+  const bufferComprimido = await comprimirParaSubida(bufferOriginal);
+  const asset = await client.assets.upload('image', bufferComprimido, {
     filename: path.basename(rutaCompleta),
   });
-  return { buffer, asset };
+  return asset;
 }
 
-async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio) {
+function moverAYaSubido(rutaCarpeta, nombresArchivos) {
+  const carpetaDestino = path.join(rutaCarpeta, CARPETA_YA_SUBIDO);
+  if (!fs.existsSync(carpetaDestino)) {
+    fs.mkdirSync(carpetaDestino, { recursive: true });
+  }
+
+  for (const nombre of nombresArchivos) {
+    try {
+      const origen = path.join(rutaCarpeta, nombre);
+      const destino = path.join(carpetaDestino, nombre);
+      if (fs.existsSync(origen)) {
+        fs.renameSync(origen, destino);
+      }
+    } catch (error) {
+      console.log(`  (No se pudo mover ${nombre}, pero ya quedo registrado como procesado: ${error.message})`);
+    }
+  }
+}
+
+async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio, cantidad, manifiesto) {
   const primeraFoto = fotosDelGrupo[0].archivo;
   const rutaPrimeraFoto = path.join(rutaCarpeta, primeraFoto);
 
-  console.log(`  1. Analizando foto principal (${primeraFoto}) con Gemini...`);
-  const imageBuffer = fs.readFileSync(rutaPrimeraFoto);
-  const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+  console.log(`  1. Preparando foto principal (${primeraFoto})...`);
+  const imageBufferOriginal = fs.readFileSync(rutaPrimeraFoto);
+  const imageBufferAnalisis = await redimensionarParaAnalisis(imageBufferOriginal);
 
-  const prompt = `Analiza esta foto de un producto de venta y devuelve SOLO un JSON valido (sin texto adicional, sin backticks de markdown) con exactamente estos campos:
-{
-  "titulo": "nombre completo y claro del producto",
-  "marca": "marca visible, o null si no aplica",
-  "descripcion": "descripcion corta de 1-2 lineas basada en lo que se ve o lee en el empaque",
-  "palabrasClave": ["lista", "de", "palabras", "clave", "para", "busqueda"],
-  "edadRecomendada": "edad recomendada si aparece en el empaque, o null",
-  "capacidad": "capacidad si aplica, ej 260ml o 24oz, o null",
-  "edicion": "edicion especial si se menciona, o null"
-}`;
+  console.log('  2. Analizando con Gemini...');
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-flash-lite-latest',
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: ESQUEMA_RESPUESTA,
+    },
+  });
 
   const imagePart = {
-    inlineData: { data: imageBuffer.toString('base64'), mimeType: 'image/jpeg' },
+    inlineData: {
+      data: imageBufferAnalisis.toString('base64'),
+      mimeType: 'image/jpeg',
+    },
   };
 
-  const result = await model.generateContent([prompt, imagePart]);
-  const textoRespuesta = result.response.text();
-  const jsonLimpio = textoRespuesta.replace(/```json|```/g, '').trim();
-  const datos = JSON.parse(jsonLimpio);
+  const result = await model.generateContent([PROMPT_ANALISIS, imagePart]);
+  const datos = JSON.parse(result.response.text());
 
   console.log(`  Titulo detectado: ${datos.titulo}`);
 
-  console.log(`  2. Subiendo ${fotosDelGrupo.length} foto(s) a Sanity...`);
-  const imagenPrincipalAsset = await subirImagen(rutaPrimeraFoto);
+  console.log(`  3. Comprimiendo y subiendo ${fotosDelGrupo.length} foto(s) a Sanity...`);
+  const imagenPrincipalAsset = await subirImagenComprimida(rutaPrimeraFoto);
 
   const fotosGaleria = fotosDelGrupo.slice(1);
   const assetsGaleria = [];
   for (const foto of fotosGaleria) {
     const rutaCompleta = path.join(rutaCarpeta, foto.archivo);
-    const subida = await subirImagen(rutaCompleta);
-    assetsGaleria.push(subida.asset);
+    const asset = await subirImagenComprimida(rutaCompleta);
+    assetsGaleria.push(asset);
   }
 
-  console.log('  3. Creando el producto...');
+  console.log('  4. Creando el producto...');
+  const slugFinal = `${generarSlug(datos.titulo)}-${sufijoUnico(imagenPrincipalAsset._id)}`;
+
   const documento = {
     _type: 'producto',
     titulo: datos.titulo,
-    slug: { _type: 'slug', current: generarSlug(datos.titulo) },
-    precio,
+    slug: { _type: 'slug', current: slugFinal },
+    ...(precio !== null ? { precio } : {}),
+    ...(cantidad !== null ? { cantidadDisponible: cantidad } : {}),
     estado: 'Nuevo',
     descripcion: datos.descripcion,
     imagenPrincipal: {
       _type: 'image',
-      asset: { _type: 'reference', _ref: imagenPrincipalAsset.asset._id },
+      asset: { _type: 'reference', _ref: imagenPrincipalAsset._id },
     },
     ...(assetsGaleria.length > 0 ? {
       galeria: assetsGaleria.map((asset) => ({
@@ -138,7 +230,27 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio)
   };
 
   const creado = await client.create(documento);
-  console.log(`  Listo. ID: ${creado._id}`);
+  const avisos = [];
+  if (precio === null) avisos.push('SIN PRECIO');
+  if (cantidad === null) avisos.push('SIN CANTIDAD');
+  const textoAviso = avisos.length > 0 ? ` (${avisos.join(', ')}, pendiente de completar)` : '';
+  console.log(`  Listo. ID: ${creado._id} | Slug: ${slugFinal}${textoAviso}`);
+
+  // Registramos en el manifiesto el hash de cada foto de este grupo,
+  // ANTES de intentar moverlas. Asi, aunque el movimiento falle o iCloud
+  // restaure el archivo, el script nunca lo va a volver a procesar.
+  for (const foto of fotosDelGrupo) {
+    const rutaFoto = path.join(rutaCarpeta, foto.archivo);
+    const buffer = fs.readFileSync(rutaFoto);
+    const hash = calcularHash(buffer);
+    manifiesto[hash] = { archivo: foto.archivo, productoId: creado._id, fecha: new Date().toISOString() };
+  }
+  guardarManifiesto(rutaCarpeta, manifiesto);
+
+  const nombresDeArchivos = fotosDelGrupo.map((f) => f.archivo);
+  moverAYaSubido(rutaCarpeta, nombresDeArchivos);
+  console.log(`  Foto(s) movida(s) a la subcarpeta "${CARPETA_YA_SUBIDO}" (y registrada(s) permanentemente como procesadas).`);
+
   return creado;
 }
 
@@ -161,43 +273,88 @@ async function main() {
     process.exit(1);
   }
 
-  const archivos = fs.readdirSync(rutaCarpeta)
+  const manifiesto = cargarManifiesto(rutaCarpeta);
+
+  const archivosTodos = fs.readdirSync(rutaCarpeta, { withFileTypes: true })
+    .filter((entrada) => entrada.isFile())
+    .map((entrada) => entrada.name)
     .filter((nombre) => EXTENSIONES_VALIDAS.includes(path.extname(nombre).toLowerCase()));
 
+  // Filtramos por contenido: si el hash de la foto ya esta en el manifiesto,
+  // la ignoramos aunque el archivo haya reaparecido en la carpeta.
+  const archivos = [];
+  let ignoradosPorManifiesto = 0;
+  for (const nombre of archivosTodos) {
+    const rutaCompleta = path.join(rutaCarpeta, nombre);
+    const buffer = fs.readFileSync(rutaCompleta);
+    const hash = calcularHash(buffer);
+    if (manifiesto[hash]) {
+      ignoradosPorManifiesto++;
+    } else {
+      archivos.push(nombre);
+    }
+  }
+
+  if (ignoradosPorManifiesto > 0) {
+    console.log(`(${ignoradosPorManifiesto} foto(s) ignorada(s) porque ya estaban registradas como procesadas previamente)`);
+  }
+
   if (archivos.length === 0) {
-    console.error('No se encontraron fotos validas en esa carpeta.');
-    process.exit(1);
+    console.log('No hay fotos pendientes en esta carpeta.');
+    process.exit(0);
   }
 
   const grupos = agruparPorProducto(archivos);
   const claves = Object.keys(grupos).sort();
 
-  console.log(`\nEncontrados ${claves.length} producto(s) (${archivos.length} foto(s) en total).\n`);
+  console.log(`\nEncontrados ${claves.length} producto(s) pendiente(s) (${archivos.length} foto(s) en total).\n`);
 
-  const resultados = { exitosos: 0, fallidos: 0 };
+  const resultados = { completos: 0, incompletos: 0, fallidos: 0 };
 
   for (const clave of claves) {
     const fotosDelGrupo = grupos[clave];
     const nombresFotos = fotosDelGrupo.map((f) => f.archivo).join(', ');
     console.log(`\n--- Producto: ${clave} (${fotosDelGrupo.length} foto(s): ${nombresFotos}) ---`);
 
-    const precioTexto = await preguntar(`Precio para "${clave}" (o escribe "saltar" para omitir): `);
+    const rutaPrimeraFoto = path.join(rutaCarpeta, fotosDelGrupo[0].archivo);
+    abrirFotoEnVistaPrevia(rutaPrimeraFoto);
+
+    const precioTexto = await preguntar(`Precio para "${clave}" (Enter si aun no lo sabes, o "saltar" para omitir por completo): `);
 
     if (precioTexto.trim().toLowerCase() === 'saltar') {
-      console.log('  Omitido.');
+      console.log('  Omitido (la foto se queda en la carpeta para procesarla despues).');
       continue;
     }
 
-    const precio = Number(precioTexto);
-    if (Number.isNaN(precio)) {
-      console.log('  Precio invalido, se omite este producto.');
-      resultados.fallidos++;
-      continue;
+    let precio = null;
+    if (precioTexto.trim() !== '') {
+      precio = Number(precioTexto);
+      if (Number.isNaN(precio)) {
+        console.log('  Precio invalido, se omite este producto.');
+        resultados.fallidos++;
+        continue;
+      }
+    }
+
+    const cantidadTexto = await preguntar(`Cantidad disponible para "${clave}" (Enter si aun no la sabes): `);
+
+    let cantidad = null;
+    if (cantidadTexto.trim() !== '') {
+      cantidad = Number(cantidadTexto);
+      if (Number.isNaN(cantidad)) {
+        console.log('  Cantidad invalida, se omite este producto.');
+        resultados.fallidos++;
+        continue;
+      }
     }
 
     try {
-      await procesarProducto(rutaCarpeta, fotosDelGrupo, categoria._id, precio);
-      resultados.exitosos++;
+      await procesarProducto(rutaCarpeta, fotosDelGrupo, categoria._id, precio, cantidad, manifiesto);
+      if (precio === null || cantidad === null) {
+        resultados.incompletos++;
+      } else {
+        resultados.completos++;
+      }
     } catch (error) {
       console.error(`  Error con ${clave}:`, error.message);
       resultados.fallidos++;
@@ -205,7 +362,8 @@ async function main() {
   }
 
   console.log(`\n=== Resumen ===`);
-  console.log(`Creados con exito: ${resultados.exitosos}`);
+  console.log(`Creados completos (precio y cantidad): ${resultados.completos}`);
+  console.log(`Creados incompletos (falta precio y/o cantidad): ${resultados.incompletos}`);
   console.log(`Fallidos u omitidos: ${resultados.fallidos}`);
 
   rl.close();

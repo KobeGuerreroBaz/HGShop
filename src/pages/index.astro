@@ -1,43 +1,51 @@
 ---
-import { sanityClient } from '../lib/sanity';
+import { sanityClient, urlFor } from '../lib/sanity';
 import Layout from '../layouts/Layout.astro';
+import MenuHamburguesa from '../components/MenuHamburguesa.astro';
 import ProductCard from '../components/ProductCard.astro';
+
+const categorias = await sanityClient.fetch(`
+  *[_type == "categoria" && defined(departamento)]{
+    titulo,
+    departamento,
+    imagen
+  }
+`);
 
 const productos = await sanityClient.fetch(`
   *[_type == "producto" && defined(categoria)]{
     "slug": slug.current,
     titulo,
     precio,
-    estado,
     descripcion,
     imagenPrincipal,
     edicion,
     palabrasClave,
-    "categoriaTitulo": categoria->titulo,
     "categoriaDepartamento": categoria->departamento
   }
 `);
 
-const porDepartamento = productos.reduce((acc: any, producto: any) => {
-  const depto = producto.categoriaDepartamento || 'otros';
-  const cat = producto.categoriaTitulo || 'Sin categoría';
+const departamentos = Array.from(new Set(categorias.map((c: any) => c.departamento))) as string[];
 
-  if (!acc[depto]) acc[depto] = {};
-  if (!acc[depto][cat]) acc[depto][cat] = [];
-  acc[depto][cat].push(producto);
-
-  return acc;
-}, {});
-
-const departamentos = Object.keys(porDepartamento);
+const infoPorDepartamento = departamentos.map((depto) => {
+  const categoriaRepresentativa = categorias.find((c: any) => c.departamento === depto);
+  const totalProductos = productos.filter((p: any) => p.categoriaDepartamento === depto).length;
+  return {
+    depto,
+    imagen: categoriaRepresentativa?.imagen,
+    totalProductos,
+  };
+});
 ---
 <Layout titulo="HG Shop MX - Catálogo">
+  <MenuHamburguesa departamentos={departamentos} />
+
   <section class="px-6 py-16 text-center max-w-2xl mx-auto">
     <h1 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900">
       Catálogo HG Shop
     </h1>
     <p class="mt-3 text-neutral-500">
-      Busca el producto que necesitas y pídelo directo por WhatsApp
+      Busca un producto o elige un departamento
     </p>
 
     <div class="mt-8">
@@ -50,73 +58,89 @@ const departamentos = Object.keys(porDepartamento);
     </div>
   </section>
 
-  <main class="px-6 pb-20 max-w-5xl mx-auto space-y-16">
-    {departamentos.map((depto) => {
-      const categorias = Object.keys(porDepartamento[depto]);
-      return (
-        <section data-departamento={depto}>
-          <h2 class="text-2xl font-semibold text-neutral-900 capitalize mb-6 pb-2 border-b border-neutral-100">
-            {depto.replace(/-/g, ' ')}
-          </h2>
-          <div class="space-y-10">
-            {categorias.map((cat) => (
-              <div data-categoria={cat}>
-                <h3 class="text-base font-medium text-neutral-700 capitalize mb-4">
-                  {cat}
-                </h3>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
-                  {porDepartamento[depto][cat].map((producto: any) => (
-                    <div
-                      class="producto-item"
-                      data-buscable={`${producto.titulo} ${(producto.palabrasClave || []).join(' ')}`.toLowerCase()}
-                    >
-                      <ProductCard
-                        slug={producto.slug}
-                        titulo={producto.titulo}
-                        precio={producto.precio}
-                        imagenPrincipal={producto.imagenPrincipal}
-                        descripcion={producto.descripcion}
-                        edicion={producto.edicion}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+  <main class="px-6 pb-20 max-w-5xl mx-auto">
+    <div id="tarjetas-departamentos" class="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-6">
+      {infoPorDepartamento.map(({ depto, imagen, totalProductos }) => (
+        <a
+          href={`/catalogo/${depto}`}
+          class="group relative aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100 border border-neutral-100"
+        >
+          {imagen && (
+            <img
+              src={urlFor(imagen).width(600).height(450).fit('crop').url()}
+              alt={depto}
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+          )}
+          <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+          <div class="absolute bottom-0 left-0 right-0 p-5">
+            <h2 class="text-white text-xl font-semibold capitalize">{depto.replace(/-/g, ' ')}</h2>
+            <p class="text-white/80 text-sm mt-1">{totalProductos} producto{totalProductos !== 1 ? 's' : ''}</p>
           </div>
-        </section>
-      );
-    })}
+        </a>
+      ))}
+    </div>
 
-    {departamentos.length === 0 && (
-      <p class="text-center text-neutral-400">Todavía no hay productos cargados.</p>
-    )}
+    <div id="resultados-busqueda" class="hidden">
+      <p id="contador-resultados" class="text-sm text-neutral-500 mb-6"></p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
+        {productos.map((producto: any) => (
+          <div
+            class="producto-item"
+            data-buscable={`${producto.titulo} ${(producto.palabrasClave || []).join(' ')}`.toLowerCase()}
+          >
+            <ProductCard
+              slug={producto.slug}
+              titulo={producto.titulo}
+              precio={producto.precio}
+              imagenPrincipal={producto.imagenPrincipal}
+              descripcion={producto.descripcion}
+              edicion={producto.edicion}
+            />
+          </div>
+        ))}
+      </div>
+      <p id="sin-resultados" class="hidden text-center text-neutral-400 py-12">
+        No se encontraron productos con ese término.
+      </p>
+    </div>
   </main>
 </Layout>
 
 <script>
   const input = document.getElementById('buscador') as HTMLInputElement;
+  const tarjetasDepartamentos = document.getElementById('tarjetas-departamentos');
+  const resultadosBusqueda = document.getElementById('resultados-busqueda');
+  const contadorResultados = document.getElementById('contador-resultados');
+  const sinResultados = document.getElementById('sin-resultados');
 
   input?.addEventListener('input', () => {
     const query = input.value.trim().toLowerCase();
+    const hayBusqueda = query !== '';
 
+    if (tarjetasDepartamentos) {
+      tarjetasDepartamentos.style.display = hayBusqueda ? 'none' : '';
+    }
+    if (resultadosBusqueda) {
+      resultadosBusqueda.classList.toggle('hidden', !hayBusqueda);
+    }
+
+    if (!hayBusqueda) return;
+
+    let visibles = 0;
     const items = document.querySelectorAll<HTMLElement>('.producto-item');
     items.forEach((item) => {
       const texto = item.dataset.buscable || '';
-      const coincide = query === '' || texto.includes(query);
+      const coincide = texto.includes(query);
       item.style.display = coincide ? '' : 'none';
+      if (coincide) visibles++;
     });
 
-    const categorias = document.querySelectorAll<HTMLElement>('[data-categoria]');
-    categorias.forEach((cat) => {
-      const visibles = cat.querySelectorAll<HTMLElement>('.producto-item:not([style*="display: none"])');
-      cat.style.display = visibles.length > 0 ? '' : 'none';
-    });
-
-    const departamentosEl = document.querySelectorAll<HTMLElement>('[data-departamento]');
-    departamentosEl.forEach((depto) => {
-      const categoriasVisibles = depto.querySelectorAll<HTMLElement>('[data-categoria]:not([style*="display: none"])');
-      depto.style.display = categoriasVisibles.length > 0 ? '' : 'none';
-    });
+    if (contadorResultados) {
+      contadorResultados.textContent = `${visibles} resultado${visibles !== 1 ? 's' : ''} para "${query}"`;
+    }
+    if (sinResultados) {
+      sinResultados.classList.toggle('hidden', visibles > 0);
+    }
   });
 </script>

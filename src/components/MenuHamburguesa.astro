@@ -1,0 +1,37 @@
+---
+interface Props {
+  departamentos: string[];
+}
+const { departamentos } = Astro.props;
+---
+<header class="sticky top-0 z-20 bg-white border-b border-neutral-100">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <a href="/" class="text-lg font-semibold tracking-tight text-neutral-900">HG Shop</a>
+    <button id="boton-menu" type="button" aria-label="Abrir menú" class="flex flex-col gap-1.5 p-2">
+      <span class="block w-6 h-0.5 bg-neutral-900"></span>
+      <span class="block w-6 h-0.5 bg-neutral-900"></span>
+      <span class="block w-6 h-0.5 bg-neutral-900"></span>
+    </button>
+  </div>
+  <nav id="menu-desplegable" class="hidden border-t border-neutral-100">
+    <ul class="max-w-5xl mx-auto px-6 py-4 space-y-3">
+      <li><a href="/" class="block text-sm font-medium text-neutral-700 hover:text-neutral-900">Inicio</a></li>
+      {departamentos.map((depto) => (
+        <li>
+          <a href={`/catalogo/${depto}`} class="block text-sm font-medium text-neutral-700 hover:text-neutral-900 capitalize">
+            {depto.replace(/-/g, ' ')}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+</header>
+
+<script>
+  const boton = document.getElementById('boton-menu');
+  const menu = document.getElementById('menu-desplegable');
+
+  boton?.addEventListener('click', () => {
+    menu?.classList.toggle('hidden');
+  });
+</script>
