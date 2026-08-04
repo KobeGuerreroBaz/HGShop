@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --hide-scrollbars --enable-logging=stderr --v=1 --window-size=800,900 --screenshot=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/mosaico-links.png http://localhost:4321/)",
+      "Bash(curl -s -o /dev/null -w \"status: %{http_code}\\\\n\" http://localhost:4321/)",
+      "Bash(curl -s http://localhost:4321/ -o /private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/index-render4.html)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=800,900 --screenshot=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/mosaico-crossfade-t0.png http://localhost:4321/)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s http://localhost:4321/productos/termo-starbucks-x-alison-bremner -o /private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/producto-multi.html)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --remote-debugging-port=9222 --user-data-dir=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/chrome-profile-test about:blank)",
+      "Bash(curl -s http://localhost:9222/json/version)",
+      "Bash(node test-lightbox.mjs)",
+      "Bash(lsof -ti:9222 -sTCP:LISTEN)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --remote-debugging-port=9223 --user-data-dir=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/chrome-profile-diag http://localhost:4321/productos/termo-starbucks-x-alison-bremner)",
+      "Bash(curl -s http://localhost:9223/json/version)",
+      "Bash(node open-lightbox-shot.mjs \"$\\(pwd\\)/lightbox-actual.png\")",
+      "Bash(node open-lightbox-shot.mjs \"$\\(pwd\\)/lightbox-actual2.png\")",
+      "Bash(node open-lightbox-shot.mjs \"$\\(pwd\\)/lightbox-fixed.png\")",
+      "Bash(xargs -r kill)",
+      "Bash(lsof -ti:9224 -sTCP:LISTEN)"
+    ]
+  }
+}

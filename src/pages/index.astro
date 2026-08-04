@@ -9,8 +9,7 @@ import ProductCard from '../components/ProductCard.astro';
 const categorias = await sanityClient.fetch(`
   *[_type == "categoria" && defined(departamento)]{
     titulo,
-    departamento,
-    imagen
+    departamento
   }
 `);
 
@@ -33,13 +32,40 @@ const configWhatsApp = await obtenerConfiguracionWhatsApp();
 
 const departamentos = Array.from(new Set(categorias.map((c: any) => c.departamento))) as string[];
 
+// Mosaico de fotos de producto por departamento: la tarjeta del inicio ya no usa una sola
+// imagen fija de la categoría, sino varias fotos reales elegidas al azar que además rotan
+// en el navegador (ver el <script> de "Mosaico de departamentos" más abajo).
+const TAMANO_MOSAICO = 4;
+const TAMANO_POOL_ROTACION = 10;
+
+function elegirAlAzar<T>(items: T[], cantidad: number): T[] {
+  const copia = [...items];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia.slice(0, cantidad);
+}
+
+function claseCasilla(indice: number, total: number): string {
+  if (total === 1) return 'col-span-2 row-span-2';
+  if (total === 2) return 'row-span-2';
+  if (total === 3 && indice === 0) return 'col-span-2';
+  return '';
+}
+
 const infoPorDepartamento = departamentos.map((depto) => {
-  const categoriaRepresentativa = categorias.find((c: any) => c.departamento === depto);
-  const totalProductos = productos.filter((p: any) => p.categoriaDepartamento === depto).length;
+  const productosDelDepto = productos.filter((p: any) => p.categoriaDepartamento === depto);
+  const productosConFoto = productosDelDepto.filter((p: any) => p.imagenPrincipal);
+  const fotosParaRotar = elegirAlAzar(productosConFoto, TAMANO_POOL_ROTACION).map((p: any) => ({
+    slug: p.slug,
+    url: urlFor(p.imagenPrincipal).width(300).height(300).fit('crop').url(),
+  }));
   return {
     depto,
-    imagen: categoriaRepresentativa?.imagen,
-    totalProductos,
+    mosaico: fotosParaRotar.slice(0, TAMANO_MOSAICO),
+    poolRotacion: fotosParaRotar,
+    totalProductos: productosDelDepto.length,
   };
 });
 
@@ -81,25 +107,41 @@ const datosOrganizacion = {
   </div>
 
   <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto">
-    <div id="tarjetas-departamentos" class="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-6">
-      {infoPorDepartamento.map(({ depto, imagen, totalProductos }) => (
-        <a
-          href={`/catalogo/${depto}`}
-          class="group relative aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100 border border-neutral-100"
-        >
-          {imagen && (
-            <img
-              src={urlFor(imagen).width(600).height(450).fit('crop').url()}
-              alt={depto}
-              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-          )}
-          <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
-          <div class="absolute bottom-0 left-0 right-0 p-5">
-            <h2 class="text-white text-xl font-semibold">{nombreDepartamento(depto, configWhatsApp)}</h2>
-            <p class="text-white/80 text-sm mt-1">{totalProductos} producto{totalProductos !== 1 ? 's' : ''}</p>
+    <div id="tarjetas-departamentos" class="max-w-3xl mx-auto grid grid-cols-2 gap-4 sm:gap-6">
+      {infoPorDepartamento.map(({ depto, mosaico, poolRotacion, totalProductos }) => (
+        <div>
+          <div
+            class="mosaico-departamento aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100 border border-neutral-100 grid grid-cols-2 grid-rows-2 gap-0.5"
+            data-pool={JSON.stringify(poolRotacion)}
+          >
+            {mosaico.map((foto, indice) => (
+              <a
+                href={`/productos/${foto.slug}`}
+                data-slug={foto.slug}
+                class={`mosaico-casilla group relative block overflow-hidden bg-neutral-200 ${claseCasilla(indice, mosaico.length)}`}
+              >
+                <img
+                  class="mosaico-capa-fondo absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                  src={foto.url}
+                  alt={nombreDepartamento(depto, configWhatsApp)}
+                  loading={indice === 0 ? 'eager' : 'lazy'}
+                  fetchpriority={indice === 0 ? 'high' : 'auto'}
+                  decoding="async"
+                />
+                <img
+                  class="mosaico-capa-frente absolute inset-0 w-full h-full object-cover opacity-0 transition duration-[400ms] ease-in-out group-hover:scale-105"
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                />
+              </a>
+            ))}
           </div>
-        </a>
+          <a href={`/catalogo/${depto}`} class="mt-3 block text-center">
+            <h2 class="text-neutral-900 text-base sm:text-xl font-semibold">{nombreDepartamento(depto, configWhatsApp)}</h2>
+            <p class="text-neutral-500 text-xs sm:text-sm mt-1">{totalProductos} producto{totalProductos !== 1 ? 's' : ''}</p>
+          </a>
+        </div>
       ))}
     </div>
 
@@ -167,5 +209,75 @@ const datosOrganizacion = {
     if (sinResultados) {
       sinResultados.classList.toggle('hidden', visibles > 0);
     }
+  });
+</script>
+
+<script>
+  // Mosaico de departamentos: cada tarjeta trae un "pool" de fotos de producto en
+  // data-pool; cada pocos segundos se elige una casilla al azar y se le hace fade
+  // a otra foto distinta del mismo departamento, sin recargar la página.
+  const INTERVALO_BASE_MS = 3500;
+  const VARIACION_MS = 2000;
+  const DURACION_FADE_MS = 400;
+
+  interface FotoMosaico {
+    slug: string;
+    url: string;
+  }
+
+  document.querySelectorAll<HTMLElement>('.mosaico-departamento').forEach((mosaico) => {
+    let pool: FotoMosaico[] = [];
+    try {
+      pool = JSON.parse(mosaico.dataset.pool || '[]');
+    } catch {
+      pool = [];
+    }
+
+    const casillas = Array.from(mosaico.querySelectorAll<HTMLAnchorElement>('.mosaico-casilla'));
+    if (casillas.length === 0) return;
+
+    // Si el pool no trae más fotos que las casillas visibles, ya se están mostrando
+    // todos los productos disponibles de este departamento: no hay a qué rotar sin repetir.
+    if (pool.length <= casillas.length) return;
+
+    function rotarUnaFoto() {
+      const slugsEnPantalla = new Set(casillas.map((casilla) => casilla.dataset.slug));
+      const candidatas = pool.filter((foto) => !slugsEnPantalla.has(foto.slug));
+      if (candidatas.length === 0) return;
+
+      const casilla = casillas[Math.floor(Math.random() * casillas.length)];
+      const capaFondo = casilla.querySelector<HTMLImageElement>('.mosaico-capa-fondo');
+      const capaFrente = casilla.querySelector<HTMLImageElement>('.mosaico-capa-frente');
+      if (!capaFondo || !capaFrente) return;
+
+      const nuevaFoto = candidatas[Math.floor(Math.random() * candidatas.length)];
+
+      // Crossfade real: la capa de atrás sigue mostrando la foto vieja a opacidad 1
+      // mientras la de enfrente (precargada, invisible) se va apareciendo encima —
+      // nunca hay un instante en el que ambas capas estén en opacidad 0.
+      capaFrente.onload = () => {
+        capaFrente.classList.remove('opacity-0');
+        capaFrente.classList.add('opacity-100');
+
+        window.setTimeout(() => {
+          capaFondo.src = nuevaFoto.url;
+          casilla.href = `/productos/${nuevaFoto.slug}`;
+          casilla.dataset.slug = nuevaFoto.slug;
+
+          // La capa de atrás ya tiene la foto nueva: apagar la de enfrente sin
+          // transición no se nota (ambas capas coinciden), y queda lista para
+          // la siguiente rotación.
+          capaFrente.style.transition = 'none';
+          capaFrente.classList.remove('opacity-100');
+          capaFrente.classList.add('opacity-0');
+          void capaFrente.offsetWidth;
+          capaFrente.style.transition = '';
+        }, DURACION_FADE_MS);
+      };
+      capaFrente.src = nuevaFoto.url;
+    }
+
+    const demora = INTERVALO_BASE_MS + Math.random() * VARIACION_MS;
+    window.setInterval(rotarUnaFoto, demora);
   });
 </script>
