@@ -280,12 +280,28 @@ const datosBreadcrumb = {
     abrirLightbox(indiceActual);
   });
 
+  function sinBarraFinal(pathname: string): string {
+    return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+  }
+
   const enlaceVolver = document.getElementById('enlace-volver') as HTMLAnchorElement;
   enlaceVolver?.addEventListener('click', (evento) => {
-    const vieneDelMismoSitio = document.referrer && document.referrer.startsWith(window.location.origin);
+    // "Volver" siempre debe caer en la categoría de ESTE producto (el href ya apunta ahí).
+    // Solo usamos history.back() cuando el referrer es exactamente esa página de categoría,
+    // para recuperar scroll y estado (ej. "ver más" expandido) tal como se dejó — si se llegó
+    // desde otro lado (inicio, otro producto, WhatsApp, buscador externo), navegamos normal.
+    // Comparamos sin la barra final porque en producción las rutas se sirven con "/" al final.
+    let vieneDeEstaCategoria = false;
+    if (document.referrer) {
+      try {
+        vieneDeEstaCategoria = sinBarraFinal(new URL(document.referrer).pathname) === sinBarraFinal(enlaceVolver.pathname);
+      } catch {
+        vieneDeEstaCategoria = false;
+      }
+    }
     const hayHistorialParaRegresar = window.history.length > 1;
 
-    if (vieneDelMismoSitio && hayHistorialParaRegresar) {
+    if (vieneDeEstaCategoria && hayHistorialParaRegresar) {
       evento.preventDefault();
       window.history.back();
     }

@@ -17,7 +17,21 @@
       "Bash(node open-lightbox-shot.mjs \"$\\(pwd\\)/lightbox-actual2.png\")",
       "Bash(node open-lightbox-shot.mjs \"$\\(pwd\\)/lightbox-fixed.png\")",
       "Bash(xargs -r kill)",
-      "Bash(lsof -ti:9224 -sTCP:LISTEN)"
+      "Bash(lsof -ti:9224 -sTCP:LISTEN)",
+      "Bash(curl -s http://localhost:4321/catalogo/hot-wheels)",
+      "Bash(curl -s -o /dev/null -w \"status catalogo: %{http_code}\\\\n\" http://localhost:4321/catalogo/hot-wheels)",
+      "Bash(node \"/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/test-volver.mjs\")",
+      "Bash(npm run *)",
+      "Bash(npx wrangler *)",
+      "Bash(curl -s -o /dev/null -w \"wrangler preview status: %{http_code}\\\\n\" http://localhost:8787/)",
+      "Bash(lsof -ti:8787 -sTCP:LISTEN)",
+      "Bash(node /private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/test-volver-prod.mjs)",
+      "Bash(curl -s -o /dev/null -w \"dev server \\(4321\\) status: %{http_code}\\\\n\" http://localhost:4321/)",
+      "Bash(curl -s http://localhost:4321/ -o __TRACKED_VAR__/index-perf.html)",
+      "Bash(grep -o 'fetchpriority=\"high\"' __TRACKED_VAR__/index-perf.html)",
+      "Bash(curl -s -D - -o /dev/null -H 'Accept: image/avif,image/webp,image/*,*/*' 'https://cdn.sanity.io/images/lit3j3pr/production/7a501bdde355dff3e4415a27531eca677a00e7f2-1200x1600.jpg?rect=0,200,1200,1200&w=200&h=200&fit=crop&auto=format')",
+      "Bash(curl -s -D - -o /dev/null -H 'Accept: image/jpeg,image/png,*/*' 'https://cdn.sanity.io/images/lit3j3pr/production/7a501bdde355dff3e4415a27531eca677a00e7f2-1200x1600.jpg?rect=0,200,1200,1200&w=200&h=200&fit=crop&auto=format')",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=390,900 --screenshot=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/perf-fix-mobile.png http://localhost:4321/)"
     ]
   }
 }

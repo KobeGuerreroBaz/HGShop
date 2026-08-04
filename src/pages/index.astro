@@ -59,7 +59,10 @@ const infoPorDepartamento = departamentos.map((depto) => {
   const productosConFoto = productosDelDepto.filter((p: any) => p.imagenPrincipal);
   const fotosParaRotar = elegirAlAzar(productosConFoto, TAMANO_POOL_ROTACION).map((p: any) => ({
     slug: p.slug,
-    url: urlFor(p.imagenPrincipal).width(300).height(300).fit('crop').url(),
+    // 200x200 alcanza y sobra para el tamaño real en pantalla de cada casilla del mosaico
+    // (~80x60px en móvil, ~185x139px en desktop); .auto('format') deja que Sanity sirva
+    // WebP/AVIF según lo que soporte el navegador en vez del JPEG/PNG original.
+    url: urlFor(p.imagenPrincipal).width(200).height(200).fit('crop').auto('format').url(),
   }));
   return {
     depto,
@@ -108,7 +111,7 @@ const datosOrganizacion = {
 
   <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto">
     <div id="tarjetas-departamentos" class="max-w-3xl mx-auto grid grid-cols-2 gap-4 sm:gap-6">
-      {infoPorDepartamento.map(({ depto, mosaico, poolRotacion, totalProductos }) => (
+      {infoPorDepartamento.map(({ depto, mosaico, poolRotacion, totalProductos }, indiceDepartamento) => (
         <div>
           <div
             class="mosaico-departamento aspect-[4/3] overflow-hidden rounded-2xl bg-neutral-100 border border-neutral-100 grid grid-cols-2 grid-rows-2 gap-0.5"
@@ -124,8 +127,8 @@ const datosOrganizacion = {
                   class="mosaico-capa-fondo absolute inset-0 w-full h-full object-cover transition duration-300 group-hover:scale-105"
                   src={foto.url}
                   alt={nombreDepartamento(depto, configWhatsApp)}
-                  loading={indice === 0 ? 'eager' : 'lazy'}
-                  fetchpriority={indice === 0 ? 'high' : 'auto'}
+                  loading={indiceDepartamento === 0 && indice === 0 ? 'eager' : 'lazy'}
+                  fetchpriority={indiceDepartamento === 0 && indice === 0 ? 'high' : 'auto'}
                   decoding="async"
                 />
                 <img
