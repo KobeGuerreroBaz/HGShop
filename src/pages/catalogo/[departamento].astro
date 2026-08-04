@@ -1,8 +1,11 @@
 ---
-import { sanityClient } from '../../lib/sanity';
+import { sanityClient, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../lib/sanity';
 import Layout from '../../layouts/Layout.astro';
 import MenuHamburguesa from '../../components/MenuHamburguesa.astro';
+import BotonCarrito from '../../components/BotonCarrito.astro';
+import PanelCarrito from '../../components/PanelCarrito.astro';
 import ProductCard from '../../components/ProductCard.astro';
+import IndicadorFlotante from '../../components/IndicadorFlotante.astro';
 
 export async function getStaticPaths() {
   const departamentos = await sanityClient.fetch(`
@@ -14,7 +17,7 @@ export async function getStaticPaths() {
   }));
 }
 
-const { departamento } = Astro.params;
+const { departamento } = Astro.params as { departamento: string };
 
 const todosDepartamentos = await sanityClient.fetch(`
   array::unique(*[_type == "categoria" && defined(departamento)].departamento)
@@ -26,13 +29,18 @@ const productos = await sanityClient.fetch(
     titulo,
     precio,
     descripcion,
+    altTexto,
     imagenPrincipal,
     edicion,
     palabrasClave,
+    agotado,
     "categoriaTitulo": categoria->titulo
   }`,
   { departamento }
 );
+
+const configWhatsApp = await obtenerConfiguracionWhatsApp();
+const numeroWhatsApp = numeroWhatsAppParaDepartamento(departamento, configWhatsApp);
 
 const porCategoria = productos.reduce((acc: any, producto: any) => {
   const cat = producto.categoriaTitulo || 'Sin categoría';
@@ -42,35 +50,117 @@ const porCategoria = productos.reduce((acc: any, producto: any) => {
 }, {});
 
 const categorias = Object.keys(porCategoria);
-const LIMITE_INICIAL = 2;
-const nombreDepartamento = departamento.replace(/-/g, ' ');
+const LIMITE_INICIAL = 4;
+const nombreDepartamentoTexto = nombreDepartamento(departamento, configWhatsApp);
+
+function quitarAcentos(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizarParaComparar(texto: string): string {
+  let t = quitarAcentos(texto.toLowerCase().trim());
+  if (t.endsWith('s') && t.length > 3) t = t.slice(0, -1);
+  return t;
+}
+
+function esRedundante(categoria: string, departamentoTexto: string): boolean {
+  return normalizarParaComparar(categoria) === normalizarParaComparar(departamentoTexto);
+}
+
+function generarDescripcionDepartamento(
+  nombreDepto: string,
+  categoriasConConteo: { titulo: string; total: number }[]
+): string {
+  const LIMITE = 3;
+
+  const nombresExpandidos: { nombre: string; total: number }[] = [];
+  for (const cat of categoriasConConteo) {
+    const partes = cat.titulo.split('/').map((p) => p.trim()).filter(Boolean);
+    for (const parte of partes) {
+      nombresExpandidos.push({ nombre: parte, total: cat.total });
+    }
+  }
+
+  const nombresUtiles = nombresExpandidos.filter(
+    (n) => !esRedundante(n.nombre, nombreDepto)
+  );
+
+  const vistos = new Set<string>();
+  const nombresUnicos = nombresUtiles.filter((n) => {
+    const clave = normalizarParaComparar(n.nombre);
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
+
+  nombresUnicos.sort((a, b) => b.total - a.total);
+
+  const totalUnicos = nombresUnicos.length;
+  const seleccionados = nombresUnicos.slice(0, LIMITE).map((n) => n.nombre);
+
+  if (seleccionados.length === 0) {
+    return `Explora nuestro catálogo de ${nombreDepto} en HG Shop MX.`;
+  }
+
+  if (seleccionados.length === 1) {
+    return `Descubre nuestra selección de ${seleccionados[0]} en ${nombreDepto} — catálogo completo en HG Shop MX.`;
+  }
+
+  const hayMas = totalUnicos > LIMITE;
+
+  if (seleccionados.length === 2 && !hayMas) {
+    return `Encuentra ${seleccionados[0]} y ${seleccionados[1]} en ${nombreDepto} — catálogo completo en HG Shop MX.`;
+  }
+
+  const todosMenosUltimo = seleccionados.slice(0, -1).join(', ');
+  const ultimo = seleccionados[seleccionados.length - 1];
+  const cierre = hayMas ? `${todosMenosUltimo}, ${ultimo} y más` : `${todosMenosUltimo} y ${ultimo}`;
+
+  return `Encuentra ${cierre} en ${nombreDepto} — catálogo completo en HG Shop MX.`;
+}
+
+const categoriasConConteo = categorias.map((titulo) => ({
+  titulo,
+  total: porCategoria[titulo].length,
+}));
+
+const descripcionDepartamento = generarDescripcionDepartamento(nombreDepartamentoTexto, categoriasConConteo);
 ---
-<Layout titulo={`${nombreDepartamento} - HG Shop MX`}>
-  <MenuHamburguesa departamentos={todosDepartamentos} />
+<Layout titulo={`${nombreDepartamentoTexto} - HG Shop MX`} descripcion={descripcionDepartamento}>
+  <MenuHamburguesa departamentos={todosDepartamentos} configWhatsApp={configWhatsApp}>
+    <BotonCarrito slot="carrito" />
+  </MenuHamburguesa>
+  <IndicadorFlotante />
+  <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
 
-  <section class="px-6 py-12 text-center max-w-2xl mx-auto">
+  <section class="px-6 pt-12 pb-4 text-center max-w-2xl mx-auto">
     <a href="/" class="text-sm text-neutral-500 hover:text-neutral-900">&larr; Volver al inicio</a>
-    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900 capitalize">
-      {nombreDepartamento}
+    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">
+      {nombreDepartamentoTexto}
     </h1>
+    <p class="mt-2 text-sm text-neutral-500">
+      {descripcionDepartamento}
+    </p>
+  </section>
 
-    <div class="mt-6">
+  <div class="sticky z-10 bg-white border-b border-neutral-100 px-6 py-3" style="top: var(--alto-header, 68px);">
+    <div class="max-w-2xl mx-auto">
       <input
         type="text"
         id="buscador"
-        placeholder={`Buscar en ${nombreDepartamento}...`}
+        placeholder={`Buscar en ${nombreDepartamentoTexto}...`}
         class="w-full rounded-full border border-neutral-200 px-6 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
       />
     </div>
-  </section>
+  </div>
 
-  <main class="px-6 pb-20 max-w-5xl mx-auto space-y-10">
+  <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto space-y-10">
     {categorias.map((cat) => {
       const productosDeCategoria = porCategoria[cat];
       const hayExtras = productosDeCategoria.length > LIMITE_INICIAL;
       return (
-        <div class="categoria-contenedor" data-categoria={cat} data-expandido="false">
-          <h3 class="text-base font-medium text-neutral-700 capitalize mb-4">{cat}</h3>
+        <div class="categoria-contenedor" data-categoria={cat} data-seccion-nombre={cat} data-expandido="false">
+          <h3 class="text-lg font-semibold text-neutral-900 mb-4 pb-2 border-b-2 border-neutral-900 inline-block pr-6">{cat}</h3>
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
             {productosDeCategoria.map((producto: any, index: number) => (
               <div
@@ -84,7 +174,10 @@ const nombreDepartamento = departamento.replace(/-/g, ' ');
                   precio={producto.precio}
                   imagenPrincipal={producto.imagenPrincipal}
                   descripcion={producto.descripcion}
+                  altTexto={producto.altTexto}
                   edicion={producto.edicion}
+                  numeroWhatsApp={numeroWhatsApp}
+                  agotado={producto.agotado}
                 />
               </div>
             ))}
@@ -139,38 +232,45 @@ const nombreDepartamento = departamento.replace(/-/g, ' ');
     const query = input.value.trim().toLowerCase();
     const hayBusqueda = query !== '';
 
-    const contenedores = document.querySelectorAll<HTMLElement>('.categoria-contenedor');
-
-    contenedores.forEach((contenedor) => {
-      const expandido = contenedor.dataset.expandido === 'true';
-      const items = contenedor.querySelectorAll<HTMLElement>('.producto-item');
-      const boton = contenedor.querySelector<HTMLButtonElement>('.boton-ver-mas');
-
-      items.forEach((item) => {
-        const texto = item.dataset.buscable || '';
-        const esExtra = item.classList.contains('producto-extra');
-
-        if (hayBusqueda) {
-          const coincide = texto.includes(query);
-          item.style.display = coincide ? '' : 'none';
-        } else {
-          if (esExtra && !expandido) {
-            item.style.display = 'none';
-          } else {
-            item.style.display = '';
-          }
-        }
+    if (!hayBusqueda) {
+      document.querySelectorAll<HTMLElement>('.producto-item').forEach((item) => {
+        if (!item.classList.contains('producto-extra')) item.style.display = '';
       });
+      document.querySelectorAll<HTMLElement>('.categoria-contenedor').forEach((cat) => {
+        const expandido = cat.dataset.expandido === 'true';
+        cat.querySelectorAll<HTMLElement>('.producto-extra').forEach((item) => {
+          item.style.display = expandido ? '' : 'none';
+        });
+        cat.style.display = '';
+      });
+      document.querySelectorAll<HTMLButtonElement>('.boton-ver-mas').forEach((boton) => {
+        const contenedor = boton.closest('.categoria-contenedor') as HTMLElement;
+        const expandido = contenedor?.dataset.expandido === 'true';
+        boton.style.display = '';
+        boton.textContent = expandido
+          ? boton.dataset.textoVerMenos || 'Ver menos'
+          : boton.dataset.textoVerMas || 'Ver más';
+      });
+      return;
+    }
 
-      if (boton) {
-        boton.style.display = hayBusqueda ? 'none' : '';
-      }
+    let visibles = 0;
+    const items = document.querySelectorAll<HTMLElement>('.producto-item');
+    items.forEach((item) => {
+      const texto = item.dataset.buscable || '';
+      const coincide = texto.includes(query);
+      item.style.display = coincide ? '' : 'none';
+      if (coincide) visibles++;
     });
 
-    const categorias = document.querySelectorAll<HTMLElement>('[data-categoria]');
-    categorias.forEach((cat) => {
-      const visibles = cat.querySelectorAll<HTMLElement>('.producto-item:not([style*="display: none"])');
-      cat.style.display = visibles.length > 0 ? '' : 'none';
+    const categoriasEl = document.querySelectorAll<HTMLElement>('[data-categoria]');
+    categoriasEl.forEach((cat) => {
+      const visiblesEnCategoria = cat.querySelectorAll<HTMLElement>('.producto-item:not([style*="display: none"])');
+      cat.style.display = visiblesEnCategoria.length > 0 ? '' : 'none';
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('.boton-ver-mas').forEach((boton) => {
+      boton.style.display = 'none';
     });
   });
 </script>

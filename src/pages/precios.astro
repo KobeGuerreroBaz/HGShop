@@ -1,0 +1,421 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout titulo="Precios - HG Shop MX" noIndex={true}>
+  <main class="px-4 py-6 max-w-md mx-auto">
+    <div id="pantalla-pin">
+      <h1 class="text-xl font-semibold text-neutral-900">Acceso</h1>
+      <p class="text-sm text-neutral-500 mt-1">Ingresa tu PIN para continuar</p>
+      <input id="input-pin" type="password" inputmode="numeric" class="w-full mt-4 border border-neutral-200 rounded-md px-3 py-2 text-sm" placeholder="PIN" />
+      <button id="boton-pin" type="button" class="w-full mt-3 bg-neutral-900 text-white rounded-md py-3 text-sm font-medium">
+        Entrar
+      </button>
+      <p id="error-pin" class="hidden text-sm text-red-600 mt-2">PIN incorrecto.</p>
+    </div>
+
+    <div id="pantalla-modo" class="hidden">
+      <h1 class="text-xl font-semibold text-neutral-900">¿Qué quieres hacer?</h1>
+      <div class="mt-5 space-y-3">
+        <button id="boton-modo-faltantes" type="button" class="w-full text-left border border-neutral-200 rounded-xl px-4 py-4">
+          <span class="block font-medium text-neutral-900">Poner precio</span>
+          <span class="block text-xs text-neutral-500 mt-1">Recorre por departamento los productos que aún no tienen precio</span>
+        </button>
+        <button id="boton-modo-busqueda" type="button" class="w-full text-left border border-neutral-200 rounded-xl px-4 py-4">
+          <span class="block font-medium text-neutral-900">Actualizar precios</span>
+          <span class="block text-xs text-neutral-500 mt-1">Busca un producto específico y edita su precio u otros datos</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="pantalla-departamento" class="hidden">
+      <button id="boton-volver-modo-1" type="button" class="text-xs text-neutral-400 underline">← Cambiar modo</button>
+      <h1 class="text-xl font-semibold text-neutral-900 mt-2">¿Qué departamento revisamos?</h1>
+      <div id="lista-departamentos" class="mt-4 space-y-2"></div>
+    </div>
+
+    <div id="pantalla-busqueda" class="hidden">
+      <button id="boton-volver-modo-2" type="button" class="text-xs text-neutral-400 underline">← Cambiar modo</button>
+      <h1 class="text-xl font-semibold text-neutral-900 mt-2">Buscar producto</h1>
+      <input id="campo-busqueda" type="text" placeholder="Escribe el nombre del producto..." class="w-full mt-3 border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+      <div id="resultados-busqueda" class="mt-3 space-y-2"></div>
+    </div>
+
+    <div id="pantalla-producto" class="hidden">
+      <button id="boton-volver-departamento" type="button" class="hidden text-xs text-neutral-400 underline">← Elegir otro departamento</button>
+      <button id="boton-volver-busqueda" type="button" class="hidden text-xs text-neutral-400 underline">← Buscar otro producto</button>
+      <p id="contador" class="text-sm text-neutral-500 mt-2"></p>
+
+      <div id="tarjeta" class="mt-3 border border-neutral-200 rounded-xl p-4">
+        <img id="imagen-producto" class="w-full aspect-square object-contain rounded-lg bg-neutral-50" />
+
+        <h2 id="titulo-producto" class="text-lg font-semibold text-neutral-900 mt-3"></h2>
+        <p id="categoria-producto" class="text-sm text-neutral-500"></p>
+
+        <div class="mt-4">
+          <label class="text-xs text-neutral-500">Precio</label>
+          <input id="campo-precio" type="number" inputmode="decimal" placeholder="$" class="w-full border border-neutral-200 rounded-md px-3 py-3 text-lg font-medium mt-1" />
+        </div>
+
+        <div class="mt-3 flex items-center gap-2">
+          <input id="campo-existencias" type="checkbox" class="h-4 w-4" />
+          <label for="campo-existencias" class="text-xs text-neutral-600">Mostrar existencias al público (indicador genérico, sin número exacto)</label>
+        </div>
+
+        <div class="mt-3 flex items-center gap-2">
+          <input id="campo-agotado" type="checkbox" class="h-4 w-4" />
+          <label for="campo-agotado" class="text-xs text-neutral-600">Marcar como AGOTADO (oculta los botones de pedido en el sitio)</label>
+        </div>
+
+        <button id="boton-mostrar-detalles" type="button" class="mt-3 text-xs text-neutral-500 underline">
+          + Agregar más detalles
+        </button>
+
+        <div id="detalles-opcionales" class="hidden mt-3 space-y-3">
+          <div>
+            <label class="text-xs text-neutral-500">Cantidad disponible</label>
+            <input id="campo-cantidad" type="number" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Marca</label>
+            <input id="campo-marca" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Palabras clave (separadas por coma)</label>
+            <input id="campo-palabras" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+        </div>
+
+        <div id="fila-botones" class="grid grid-cols-2 gap-3 mt-5">
+          <button id="boton-saltar" type="button" class="w-full border border-neutral-300 text-neutral-700 rounded-md py-3 text-sm font-medium">
+            Saltar
+          </button>
+          <button id="boton-guardar" type="button" class="w-full bg-neutral-900 text-white rounded-md py-3 text-sm font-medium">
+            Guardar y siguiente
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pantalla-fin" class="hidden text-center mt-10">
+      <p class="text-lg font-semibold text-neutral-900">🎉 Ya no quedan productos sin precio aquí</p>
+      <button id="boton-otro-departamento" type="button" class="mt-4 bg-neutral-900 text-white rounded-md py-3 px-6 text-sm font-medium">
+        Elegir otro departamento
+      </button>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  const CLAVE_STORAGE = 'hgshop-upload-pin';
+  let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
+
+  const pantallaPin = document.getElementById('pantalla-pin') as HTMLElement;
+  const pantallaModo = document.getElementById('pantalla-modo') as HTMLElement;
+  const pantallaDepartamento = document.getElementById('pantalla-departamento') as HTMLElement;
+  const pantallaBusqueda = document.getElementById('pantalla-busqueda') as HTMLElement;
+  const pantallaProducto = document.getElementById('pantalla-producto') as HTMLElement;
+  const pantallaFin = document.getElementById('pantalla-fin') as HTMLElement;
+
+  const inputPin = document.getElementById('input-pin') as HTMLInputElement;
+  const botonPin = document.getElementById('boton-pin') as HTMLButtonElement;
+  const errorPin = document.getElementById('error-pin') as HTMLElement;
+
+  const botonModoFaltantes = document.getElementById('boton-modo-faltantes') as HTMLButtonElement;
+  const botonModoBusqueda = document.getElementById('boton-modo-busqueda') as HTMLButtonElement;
+  const botonVolverModo1 = document.getElementById('boton-volver-modo-1') as HTMLButtonElement;
+  const botonVolverModo2 = document.getElementById('boton-volver-modo-2') as HTMLButtonElement;
+
+  const listaDepartamentos = document.getElementById('lista-departamentos') as HTMLElement;
+
+  const campoBusqueda = document.getElementById('campo-busqueda') as HTMLInputElement;
+  const resultadosBusqueda = document.getElementById('resultados-busqueda') as HTMLElement;
+
+  const botonVolverDepartamento = document.getElementById('boton-volver-departamento') as HTMLButtonElement;
+  const botonVolverBusqueda = document.getElementById('boton-volver-busqueda') as HTMLButtonElement;
+  const contador = document.getElementById('contador') as HTMLElement;
+  const tarjeta = document.getElementById('tarjeta') as HTMLElement;
+  const imagenProducto = document.getElementById('imagen-producto') as HTMLImageElement;
+  const tituloProducto = document.getElementById('titulo-producto') as HTMLElement;
+  const categoriaProducto = document.getElementById('categoria-producto') as HTMLElement;
+  const campoPrecio = document.getElementById('campo-precio') as HTMLInputElement;
+  const campoExistencias = document.getElementById('campo-existencias') as HTMLInputElement;
+  const campoAgotado = document.getElementById('campo-agotado') as HTMLInputElement;
+  const botonMostrarDetalles = document.getElementById('boton-mostrar-detalles') as HTMLButtonElement;
+  const detallesOpcionales = document.getElementById('detalles-opcionales') as HTMLElement;
+  const campoCantidad = document.getElementById('campo-cantidad') as HTMLInputElement;
+  const campoMarca = document.getElementById('campo-marca') as HTMLInputElement;
+  const campoPalabras = document.getElementById('campo-palabras') as HTMLInputElement;
+  const filaBotones = document.getElementById('fila-botones') as HTMLElement;
+  const botonSaltar = document.getElementById('boton-saltar') as HTMLButtonElement;
+  const botonGuardar = document.getElementById('boton-guardar') as HTMLButtonElement;
+  const botonOtroDepartamento = document.getElementById('boton-otro-departamento') as HTMLButtonElement;
+
+  function headersConPin() {
+    return { 'x-upload-pin': pinGuardado };
+  }
+
+  async function verificarPin(pin: string): Promise<boolean> {
+    const respuesta = await fetch('/api/verificar-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const resultado: { ok: boolean } = await respuesta.json();
+    return resultado.ok;
+  }
+
+  function mostrarPantalla(pantalla: HTMLElement) {
+    [pantallaPin, pantallaModo, pantallaDepartamento, pantallaBusqueda, pantallaProducto, pantallaFin].forEach((p) =>
+      p.classList.add('hidden')
+    );
+    pantalla.classList.remove('hidden');
+  }
+
+  async function mostrarContenidoSiHayAcceso() {
+    if (pinGuardado && (await verificarPin(pinGuardado))) {
+      mostrarPantalla(pantallaModo);
+    }
+  }
+  mostrarContenidoSiHayAcceso();
+
+  botonPin.addEventListener('click', async () => {
+    const valor = inputPin.value.trim();
+    const valido = await verificarPin(valor);
+    if (valido) {
+      localStorage.setItem(CLAVE_STORAGE, valor);
+      pinGuardado = valor;
+      mostrarPantalla(pantallaModo);
+    } else {
+      errorPin.classList.remove('hidden');
+    }
+  });
+
+  let modoActual: 'faltantes' | 'busqueda' = 'faltantes';
+  let productosPendientes: any[] = [];
+  let indiceActual = 0;
+
+  botonModoFaltantes.addEventListener('click', () => {
+    modoActual = 'faltantes';
+    mostrarPantalla(pantallaDepartamento);
+    cargarDepartamentos();
+  });
+
+  botonModoBusqueda.addEventListener('click', () => {
+    modoActual = 'busqueda';
+    mostrarPantalla(pantallaBusqueda);
+    campoBusqueda.value = '';
+    resultadosBusqueda.innerHTML = '';
+    campoBusqueda.focus();
+  });
+
+  botonVolverModo1.addEventListener('click', () => mostrarPantalla(pantallaModo));
+  botonVolverModo2.addEventListener('click', () => mostrarPantalla(pantallaModo));
+
+  async function cargarDepartamentos() {
+    listaDepartamentos.innerHTML = '<p class="text-sm text-neutral-400">Cargando...</p>';
+    const respuesta = await fetch('/api/departamentos', { headers: headersConPin() });
+    const departamentos: { departamento: string; nombre: string; totalSinPrecio: number }[] = await respuesta.json();
+
+    listaDepartamentos.innerHTML = '';
+
+    if (departamentos.length === 0) {
+      listaDepartamentos.innerHTML = '<p class="text-sm text-neutral-400">🎉 No hay productos sin precio en ningún departamento.</p>';
+      return;
+    }
+
+    departamentos.forEach((depto) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'w-full flex items-center justify-between border border-neutral-200 rounded-xl px-4 py-3 text-left';
+      boton.innerHTML = `
+        <span class="font-medium text-neutral-900">${depto.nombre}</span>
+        <span class="text-xs text-neutral-500">${depto.totalSinPrecio} sin precio</span>
+      `;
+      boton.addEventListener('click', () => iniciarFlujoDepartamento(depto.departamento));
+      listaDepartamentos.appendChild(boton);
+    });
+  }
+
+  async function iniciarFlujoDepartamento(departamento: string) {
+    mostrarPantalla(pantallaProducto);
+    prepararUiParaModo();
+    tarjeta.classList.add('hidden');
+
+    const respuesta = await fetch(`/api/productos-sin-precio?departamento=${encodeURIComponent(departamento)}`, {
+      headers: headersConPin(),
+    });
+    productosPendientes = await respuesta.json();
+    indiceActual = 0;
+
+    if (productosPendientes.length === 0) {
+      mostrarPantalla(pantallaFin);
+      return;
+    }
+
+    tarjeta.classList.remove('hidden');
+    renderizarProducto(productosPendientes[indiceActual]);
+  }
+
+  // ---- Búsqueda (modo: actualizar precios) ----
+  let temporizadorBusqueda: ReturnType<typeof setTimeout>;
+
+  campoBusqueda.addEventListener('input', () => {
+    clearTimeout(temporizadorBusqueda);
+    const texto = campoBusqueda.value.trim();
+
+    if (texto.length < 2) {
+      resultadosBusqueda.innerHTML = '';
+      return;
+    }
+
+    temporizadorBusqueda = setTimeout(async () => {
+      resultadosBusqueda.innerHTML = '<p class="text-sm text-neutral-400">Buscando...</p>';
+      const respuesta = await fetch(`/api/buscar-productos?q=${encodeURIComponent(texto)}`, {
+        headers: headersConPin(),
+      });
+      const resultados: any[] = await respuesta.json();
+
+      resultadosBusqueda.innerHTML = '';
+      if (resultados.length === 0) {
+        resultadosBusqueda.innerHTML = '<p class="text-sm text-neutral-400">Sin resultados.</p>';
+        return;
+      }
+
+      resultados.forEach((producto) => {
+        const fila = document.createElement('button');
+        fila.type = 'button';
+        fila.className = 'w-full flex items-center gap-3 border border-neutral-200 rounded-md p-2 text-left';
+        fila.innerHTML = `
+          <img src="${producto.imagenUrl || ''}" class="w-12 h-12 object-contain rounded bg-neutral-50" />
+          <span class="flex-1">
+            <span class="block text-sm text-neutral-900">${producto.titulo}</span>
+            <span class="block text-xs text-neutral-500">${producto.precio ? `$${producto.precio} MXN` : 'Sin precio'}${producto.agotado ? ' · 🚫 Agotado' : ''}</span>
+          </span>
+        `;
+        fila.addEventListener('click', () => abrirProductoDesdeBusqueda(producto));
+        resultadosBusqueda.appendChild(fila);
+      });
+    }, 300);
+  });
+
+  function abrirProductoDesdeBusqueda(producto: any) {
+    mostrarPantalla(pantallaProducto);
+    prepararUiParaModo();
+    renderizarProducto(producto);
+  }
+
+  // ---- UI compartida de la tarjeta ----
+  function prepararUiParaModo() {
+    if (modoActual === 'faltantes') {
+      botonVolverDepartamento.classList.remove('hidden');
+      botonVolverBusqueda.classList.add('hidden');
+      contador.classList.remove('hidden');
+      filaBotones.classList.remove('grid-cols-1');
+      filaBotones.classList.add('grid-cols-2');
+      botonSaltar.classList.remove('hidden');
+      botonGuardar.textContent = 'Guardar y siguiente';
+    } else {
+      botonVolverDepartamento.classList.add('hidden');
+      botonVolverBusqueda.classList.remove('hidden');
+      contador.classList.add('hidden');
+      contador.textContent = '';
+      filaBotones.classList.remove('grid-cols-2');
+      filaBotones.classList.add('grid-cols-1');
+      botonSaltar.classList.add('hidden');
+      botonGuardar.textContent = 'Guardar cambios';
+    }
+  }
+
+  botonVolverDepartamento.addEventListener('click', () => {
+    mostrarPantalla(pantallaDepartamento);
+    cargarDepartamentos();
+  });
+  botonVolverBusqueda.addEventListener('click', () => {
+    mostrarPantalla(pantallaBusqueda);
+  });
+  botonOtroDepartamento.addEventListener('click', () => {
+    mostrarPantalla(pantallaDepartamento);
+    cargarDepartamentos();
+  });
+
+  function renderizarProducto(producto: any) {
+    if (modoActual === 'faltantes') {
+      contador.textContent = `Producto ${indiceActual + 1} de ${productosPendientes.length} sin precio`;
+    }
+    imagenProducto.src = producto.imagenUrl || '';
+    tituloProducto.textContent = producto.titulo || '';
+    categoriaProducto.textContent = producto.categoriaTitulo || '';
+
+    campoPrecio.value = producto.precio ?? '';
+    campoExistencias.checked = !!producto.mostrarExistencias;
+    campoAgotado.checked = !!producto.agotado;
+    campoCantidad.value = producto.cantidadDisponible ?? '';
+    campoMarca.value = producto.marca || '';
+    campoPalabras.value = (producto.palabrasClave || []).join(', ');
+    detallesOpcionales.classList.add('hidden');
+    botonMostrarDetalles.textContent = '+ Agregar más detalles';
+
+    (tarjeta as any).dataset.productoId = producto._id;
+
+    campoPrecio.focus();
+  }
+
+  botonMostrarDetalles.addEventListener('click', () => {
+    const oculto = detallesOpcionales.classList.contains('hidden');
+    detallesOpcionales.classList.toggle('hidden');
+    botonMostrarDetalles.textContent = oculto ? '- Ocultar detalles' : '+ Agregar más detalles';
+  });
+
+  function avanzarSiguiente() {
+    indiceActual++;
+    if (indiceActual >= productosPendientes.length) {
+      mostrarPantalla(pantallaFin);
+    } else {
+      renderizarProducto(productosPendientes[indiceActual]);
+    }
+  }
+
+  async function guardarProducto() {
+    const productoId = (tarjeta as any).dataset.productoId;
+    const palabrasClave = campoPalabras.value
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+
+    botonGuardar.disabled = true;
+    const textoOriginal = botonGuardar.textContent;
+    botonGuardar.textContent = 'Guardando...';
+
+    const respuesta = await fetch('/api/actualizar-precio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headersConPin() },
+      body: JSON.stringify({
+        id: productoId,
+        precio: campoPrecio.value,
+        cantidad: campoCantidad.value,
+        marca: campoMarca.value,
+        palabrasClave,
+        mostrarExistencias: campoExistencias.checked,
+        agotado: campoAgotado.checked,
+      }),
+    });
+    const resultado: { ok: boolean; error?: string } = await respuesta.json();
+
+    botonGuardar.disabled = false;
+    botonGuardar.textContent = textoOriginal;
+
+    if (!resultado.ok) {
+      alert(`Error al guardar: ${resultado.error}`);
+      return;
+    }
+
+    if (modoActual === 'faltantes') {
+      avanzarSiguiente();
+    } else {
+      mostrarPantalla(pantallaBusqueda);
+    }
+  }
+
+  botonGuardar.addEventListener('click', guardarProducto);
+  botonSaltar.addEventListener('click', avanzarSiguiente);
+</script>

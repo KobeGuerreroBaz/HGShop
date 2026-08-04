@@ -7,25 +7,28 @@ interface Props {
   precio: number;
   imagenPrincipal: any;
   descripcion?: string;
+  altTexto?: string;
   edicion?: string;
+  numeroWhatsApp: string;
+  agotado?: boolean;
 }
 
-const { slug, titulo, precio, imagenPrincipal, descripcion, edicion } = Astro.props;
+const { slug, titulo, precio, imagenPrincipal, descripcion, altTexto, edicion, numeroWhatsApp, agotado } = Astro.props;
 
-const NUMERO_WHATSAPP = "528119651959";
+const linkProducto = `https://hgstoremx.com/productos/${slug}`;
+const mensaje = `Hola, me interesa: ${titulo}${edicion ? ` (${edicion})` : ''}\n\n${linkProducto}`;
+const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
 
-const mensaje = `Hola, me interesa: ${titulo}${edicion ? ` (${edicion})` : ''}`;
-const linkWhatsApp = `https://wa.me/${NUMERO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
-
-const imageUrl = urlFor(imagenPrincipal).width(400).height(400).fit('crop').url();
+const imageUrl = urlFor(imagenPrincipal).width(400).url();
+const textoAlt = altTexto || titulo;
 ---
-<div class="w-full">
+<div class="w-full" data-tarjeta-producto>
   <a href={`/productos/${slug}`} class="block">
-    <div class="aspect-square w-full overflow-hidden rounded-lg bg-neutral-50 border border-neutral-100">
+    <div class="aspect-square w-full overflow-hidden rounded-lg bg-neutral-50 border border-neutral-100 relative">
       <img
         src={imageUrl}
-        alt={titulo}
-        class="w-full h-full object-cover"
+        alt={textoAlt}
+        class={`w-full h-full object-contain ${agotado ? 'opacity-50 grayscale' : ''}`}
         loading="lazy"
       />
     </div>
@@ -35,12 +38,104 @@ const imageUrl = urlFor(imagenPrincipal).width(400).height(400).fit('crop').url(
     )}
   </a>
   <p class="mt-1 text-base font-semibold text-neutral-900">${precio} MXN</p>
-  <a
-    href={linkWhatsApp}
-    target="_blank"
-    rel="noopener noreferrer"
-    class="mt-2 inline-flex w-full items-center justify-center rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
-  >
-    Comprar por WhatsApp
-  </a>
+
+  {agotado ? (
+    <div class="mt-2 flex items-center justify-center rounded-md bg-neutral-100 border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-500 tracking-wide">
+      AGOTADO
+    </div>
+  ) : (
+    <>
+      <div class="mt-2 flex gap-2">
+        <a
+          href={linkWhatsApp}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-comprar-whatsapp flex-1 inline-flex items-center justify-center rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
+        >
+          Pedir en WApp
+        </a>
+        <button
+          type="button"
+          class="btn-agregar-carrito flex-1 inline-flex items-center justify-center rounded-md border border-neutral-900 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+          data-slug={slug}
+          data-titulo={titulo}
+          data-numero={numeroWhatsApp}
+        >
+          Agregar al carrito
+        </button>
+      </div>
+
+      <p class="aviso-carrito-obligatorio mt-2 hidden text-xs text-neutral-500 text-center">
+        ¿Quieres más de un producto? Agrégalos al carrito y te ayudamos a mandar todo en un solo mensaje.
+      </p>
+    </>
+  )}
 </div>
+
+<script>
+  import {
+    estaBloqueado,
+    estaEnCarrito,
+    agregarAlCarrito,
+    quitarDelCarrito,
+  } from '../lib/carrito';
+
+  function actualizarTarjeta(contenedor: HTMLElement) {
+    const btnComprar = contenedor.querySelector<HTMLAnchorElement>('.btn-comprar-whatsapp');
+    const btnCarrito = contenedor.querySelector<HTMLButtonElement>('.btn-agregar-carrito');
+    const aviso = contenedor.querySelector<HTMLElement>('.aviso-carrito-obligatorio');
+    const slug = btnCarrito?.dataset.slug;
+    if (!btnComprar || !btnCarrito || !slug) return;
+
+    const linkOriginal = btnComprar.dataset.href || btnComprar.getAttribute('href');
+    if (linkOriginal && !btnComprar.dataset.href) {
+      btnComprar.dataset.href = linkOriginal;
+    }
+
+    if (estaBloqueado()) {
+      btnComprar.removeAttribute('href');
+      btnComprar.setAttribute('aria-disabled', 'true');
+      btnComprar.classList.add('pointer-events-none', 'opacity-40', 'grayscale');
+      aviso?.classList.remove('hidden');
+    } else {
+      if (btnComprar.dataset.href) {
+        btnComprar.setAttribute('href', btnComprar.dataset.href);
+      }
+      btnComprar.removeAttribute('aria-disabled');
+      btnComprar.classList.remove('pointer-events-none', 'opacity-40', 'grayscale');
+      aviso?.classList.add('hidden');
+    }
+
+    const enCarrito = estaEnCarrito(slug);
+    btnCarrito.textContent = enCarrito ? 'Quitar del carrito' : 'Agregar al carrito';
+    btnCarrito.classList.toggle('bg-neutral-900', enCarrito);
+    btnCarrito.classList.toggle('text-white', enCarrito);
+  }
+
+  function actualizarTodasLasTarjetas() {
+    document.querySelectorAll<HTMLElement>('[data-tarjeta-producto]').forEach(actualizarTarjeta);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    actualizarTodasLasTarjetas();
+
+    document.querySelectorAll<HTMLButtonElement>('.btn-agregar-carrito').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const slug = btn.dataset.slug!;
+        const titulo = btn.dataset.titulo!;
+        const numeroWhatsApp = btn.dataset.numero!;
+
+        if (estaEnCarrito(slug)) {
+          quitarDelCarrito(slug);
+        } else {
+          agregarAlCarrito({ slug, titulo, numeroWhatsApp });
+        }
+
+        actualizarTodasLasTarjetas();
+        document.dispatchEvent(new CustomEvent('carrito-actualizado'));
+      });
+    });
+  });
+
+  document.addEventListener('carrito-actualizado', actualizarTodasLasTarjetas);
+</script>

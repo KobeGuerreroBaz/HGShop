@@ -1,7 +1,9 @@
 ---
-import { sanityClient, urlFor } from '../lib/sanity';
+import { sanityClient, urlFor, nombreDepartamento, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento } from '../lib/sanity';
 import Layout from '../layouts/Layout.astro';
 import MenuHamburguesa from '../components/MenuHamburguesa.astro';
+import BotonCarrito from '../components/BotonCarrito.astro';
+import PanelCarrito from '../components/PanelCarrito.astro';
 import ProductCard from '../components/ProductCard.astro';
 
 const categorias = await sanityClient.fetch(`
@@ -18,12 +20,16 @@ const productos = await sanityClient.fetch(`
     titulo,
     precio,
     descripcion,
+    altTexto,
     imagenPrincipal,
     edicion,
     palabrasClave,
+    agotado,
     "categoriaDepartamento": categoria->departamento
   }
 `);
+
+const configWhatsApp = await obtenerConfiguracionWhatsApp();
 
 const departamentos = Array.from(new Set(categorias.map((c: any) => c.departamento))) as string[];
 
@@ -36,19 +42,35 @@ const infoPorDepartamento = departamentos.map((depto) => {
     totalProductos,
   };
 });
+
+const datosOrganizacion = {
+  '@context': 'https://schema.org/',
+  '@type': 'Organization',
+  name: 'HG Shop MX',
+  url: 'https://hgstoremx.com/',
+};
 ---
 <Layout titulo="HG Shop MX - Catálogo">
-  <MenuHamburguesa departamentos={departamentos} />
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(datosOrganizacion)} />
+  </Fragment>
 
-  <section class="px-6 py-16 text-center max-w-2xl mx-auto">
+  <MenuHamburguesa departamentos={departamentos} configWhatsApp={configWhatsApp}>
+    <BotonCarrito slot="carrito" />
+  </MenuHamburguesa>
+  <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
+
+  <section class="px-6 pt-16 pb-4 text-center max-w-2xl mx-auto">
     <h1 class="text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900">
       Catálogo HG Shop
     </h1>
     <p class="mt-3 text-neutral-500">
       Busca un producto o elige un departamento
     </p>
+  </section>
 
-    <div class="mt-8">
+  <div class="sticky z-10 bg-white border-b border-neutral-100 px-6 py-3" style="top: var(--alto-header, 68px);">
+    <div class="max-w-2xl mx-auto">
       <input
         type="text"
         id="buscador"
@@ -56,9 +78,9 @@ const infoPorDepartamento = departamentos.map((depto) => {
         class="w-full rounded-full border border-neutral-200 px-6 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
       />
     </div>
-  </section>
+  </div>
 
-  <main class="px-6 pb-20 max-w-5xl mx-auto">
+  <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto">
     <div id="tarjetas-departamentos" class="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-6">
       {infoPorDepartamento.map(({ depto, imagen, totalProductos }) => (
         <a
@@ -74,7 +96,7 @@ const infoPorDepartamento = departamentos.map((depto) => {
           )}
           <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
           <div class="absolute bottom-0 left-0 right-0 p-5">
-            <h2 class="text-white text-xl font-semibold capitalize">{depto.replace(/-/g, ' ')}</h2>
+            <h2 class="text-white text-xl font-semibold">{nombreDepartamento(depto, configWhatsApp)}</h2>
             <p class="text-white/80 text-sm mt-1">{totalProductos} producto{totalProductos !== 1 ? 's' : ''}</p>
           </div>
         </a>
@@ -95,7 +117,10 @@ const infoPorDepartamento = departamentos.map((depto) => {
               precio={producto.precio}
               imagenPrincipal={producto.imagenPrincipal}
               descripcion={producto.descripcion}
+              altTexto={producto.altTexto}
               edicion={producto.edicion}
+              numeroWhatsApp={numeroWhatsAppParaDepartamento(producto.categoriaDepartamento, configWhatsApp)}
+              agotado={producto.agotado}
             />
           </div>
         ))}

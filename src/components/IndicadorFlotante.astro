@@ -1,0 +1,108 @@
+---
+---
+<div
+  id="indicador-flotante"
+  class="hidden fixed z-30
+    bg-gradient-to-br from-white/60 to-white/30 backdrop-blur-2xl backdrop-saturate-150
+    border border-white/60 shadow-lg
+    bottom-4 left-1/2 -translate-x-1/2 rounded-2xl px-4 py-2 flex-col items-center gap-0 max-w-[78%] text-center
+    sm:bottom-auto sm:left-auto sm:translate-x-0 sm:right-4 sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:max-w-[200px] sm:text-left sm:items-stretch sm:px-4 sm:py-3"
+>
+  <button
+    type="button"
+    id="indicador-anterior"
+    aria-label="Categoría anterior"
+    class="text-[10.5px] text-neutral-500 hover:text-neutral-700 flex items-center gap-1 justify-center truncate max-w-full disabled:opacity-0 disabled:pointer-events-none
+      sm:text-xs sm:justify-start sm:mb-1"
+  >
+    <span class="opacity-70">&uarr;</span> <span id="texto-anterior"></span>
+  </button>
+
+  <p id="texto-actual" class="text-sm font-bold text-neutral-900 truncate my-0.5 sm:font-semibold sm:my-1"></p>
+
+  <button
+    type="button"
+    id="indicador-siguiente"
+    aria-label="Categoría siguiente"
+    class="text-[10.5px] text-neutral-500 hover:text-neutral-700 flex items-center gap-1 justify-center truncate max-w-full disabled:opacity-0 disabled:pointer-events-none
+      sm:text-xs sm:justify-start sm:mt-1"
+  >
+    <span class="opacity-70">&darr;</span> <span id="texto-siguiente"></span>
+  </button>
+</div>
+
+<script>
+  function inicializarIndicador() {
+    const secciones = Array.from(document.querySelectorAll<HTMLElement>('[data-seccion-nombre]'));
+    if (secciones.length < 2) return;
+
+    const indicador = document.getElementById('indicador-flotante') as HTMLElement;
+    const textoAnterior = document.getElementById('texto-anterior') as HTMLElement;
+    const textoActual = document.getElementById('texto-actual') as HTMLElement;
+    const textoSiguiente = document.getElementById('texto-siguiente') as HTMLElement;
+    const botonAnterior = document.getElementById('indicador-anterior') as HTMLButtonElement;
+    const botonSiguiente = document.getElementById('indicador-siguiente') as HTMLButtonElement;
+
+    indicador.classList.remove('hidden');
+    indicador.classList.add('flex');
+
+    let indiceActual = 0;
+
+    function actualizarPanel() {
+      const anterior = secciones[indiceActual - 1];
+      const actual = secciones[indiceActual];
+      const siguiente = secciones[indiceActual + 1];
+
+      textoActual.textContent = actual?.dataset.seccionNombre || '';
+
+      if (anterior) {
+        textoAnterior.textContent = anterior.dataset.seccionNombre || '';
+        botonAnterior.disabled = false;
+      } else {
+        textoAnterior.textContent = '';
+        botonAnterior.disabled = true;
+      }
+
+      if (siguiente) {
+        textoSiguiente.textContent = siguiente.dataset.seccionNombre || '';
+        botonSiguiente.disabled = false;
+      } else {
+        textoSiguiente.textContent = '';
+        botonSiguiente.disabled = true;
+      }
+    }
+
+    actualizarPanel();
+
+    const observer = new IntersectionObserver(
+      (entradas) => {
+        entradas.forEach((entrada) => {
+          if (entrada.isIntersecting) {
+            const indice = secciones.indexOf(entrada.target as HTMLElement);
+            if (indice !== -1) {
+              indiceActual = indice;
+              actualizarPanel();
+            }
+          }
+        });
+      },
+      { rootMargin: '-40% 0px -40% 0px', threshold: 0 }
+    );
+
+    secciones.forEach((seccion) => observer.observe(seccion));
+
+    botonAnterior.addEventListener('click', () => {
+      if (indiceActual > 0) {
+        secciones[indiceActual - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+
+    botonSiguiente.addEventListener('click', () => {
+      if (indiceActual < secciones.length - 1) {
+        secciones[indiceActual + 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+
+  inicializarIndicador();
+</script>

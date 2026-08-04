@@ -22,9 +22,6 @@ export default defineType({
       name: 'departamento',
       title: 'Departamento',
       type: 'string',
-      options: {
-        list: ['bebes', 'herramientas', 'bath-body', 'perfumes', 'juguetes', 'termos-y-vasos'],
-      },
       validation: (Rule) => Rule.required(),
     }),
     defineField({
@@ -32,7 +29,6 @@ export default defineType({
       title: 'Imagen',
       type: 'image',
       options: { hotspot: true },
-      validation: (Rule) => Rule.required(),
     }),
   ],
 });

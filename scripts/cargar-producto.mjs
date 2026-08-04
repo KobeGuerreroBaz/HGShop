@@ -21,6 +21,7 @@ const ESQUEMA_RESPUESTA = {
     titulo: { type: SchemaType.STRING },
     marca: { type: SchemaType.STRING, nullable: true },
     descripcion: { type: SchemaType.STRING },
+    altTexto: { type: SchemaType.STRING },
     palabrasClave: {
       type: SchemaType.ARRAY,
       items: { type: SchemaType.STRING },
@@ -29,15 +30,28 @@ const ESQUEMA_RESPUESTA = {
     capacidad: { type: SchemaType.STRING, nullable: true },
     edicion: { type: SchemaType.STRING, nullable: true },
   },
-  required: ['titulo', 'descripcion', 'palabrasClave'],
+  required: ['titulo', 'descripcion', 'altTexto', 'palabrasClave'],
 };
 
-const PROMPT_ANALISIS = `Analiza esta foto de un producto de venta y completa los campos del esquema.
+function construirPrompt(contexto) {
+  let prompt = `Analiza esta foto de un producto de venta y completa los campos del esquema.\n`;
 
+  if (contexto) {
+    prompt += `\nEl vendedor dio este contexto adicional sobre el producto: "${contexto}"\n`;
+  }
+
+  prompt += `
 Reglas importantes:
-- descripcion: basala unicamente en lo que se ve o lee con certeza; si no estas seguro de un material o detalle especifico, no lo menciones.
+- Responde SIEMPRE en español, sin importar el idioma del texto que veas en el empaque, etiqueta o producto.
+- descripcion: escribe en tono de venta, resaltando lo atractivo del producto (calidad, diseno, uso, para quien es ideal) sin exagerar ni inventar cualidades que no se ven o no fueron confirmadas. Nada de frases genericas vacias tipo "producto de excelente calidad" - se especifico sobre que lo hace atractivo.
+- La descripcion tambien debe ayudar a que la pagina aparezca en buscadores como Google: menciona el tipo de producto, marca y caracteristica principal en la primera oracion, usando el lenguaje natural con el que un comprador buscaria este producto (ej. "portagel antibacterial", "wallflower aromatizante", "hot wheels edicion limitada"). No repitas la misma palabra clave de forma forzada ni antinatural, escribe para un humano primero.
+- altTexto: escribe una descripcion breve (maximo 125 caracteres) de LO QUE SE VE EN LA FOTO especificamente - no repitas el titulo tal cual. Menciona color, forma o detalle visible distintivo (ej. "Termo Stanley FlowState azul marino con tapa abatible" en vez de solo "Termo Stanley"). Esto es para el atributo alt de la imagen, pensado para accesibilidad y buscadores de imagenes, no para venta.
+- Si el vendedor dio contexto arriba, tratalo como informacion confirmada y usalo con seguridad en la descripcion.
 - palabrasClave: usa 5 a 8 terminos ESPECIFICOS que un cliente usaria para buscar este producto exacto (marca, modelo, color, personaje, coleccion, caracteristica distintiva). NO incluyas palabras genericas de categoria como "juguete", "producto", "articulo", "accesorio".
-- Los campos marca, edadRecomendada, capacidad y edicion deben ser null si no aplican o no son visibles.`;
+- Los campos marca, edadRecomendada, capacidad y edicion deben ser null si no aplican o no son visibles, a menos que el contexto del vendedor los confirme.`;
+
+  return prompt;
+}
 
 function generarSlug(texto) {
   return texto
@@ -67,10 +81,10 @@ async function comprimirParaSubida(buffer) {
 }
 
 async function main() {
-  const [, , rutaFoto, categoriaTitulo, precioTexto] = process.argv;
+  const [, , rutaFoto, categoriaTitulo, precioTexto, contextoTexto] = process.argv;
 
   if (!rutaFoto || !categoriaTitulo || !precioTexto) {
-    console.error('Uso: node scripts/cargar-producto.mjs <ruta-foto> "<Nombre Categoria>" <precio>');
+    console.error('Uso: node scripts/cargar-producto.mjs <ruta-foto> "<Nombre Categoria>" <precio> ["contexto opcional"]');
     process.exit(1);
   }
 
@@ -79,6 +93,8 @@ async function main() {
     console.error('El precio debe ser un numero. Ejemplo: 850');
     process.exit(1);
   }
+
+  const contexto = contextoTexto && contextoTexto.trim() !== '' ? contextoTexto.trim() : null;
 
   console.log('1. Preparando la foto...');
   const imageBufferOriginal = fs.readFileSync(rutaFoto);
@@ -105,7 +121,8 @@ async function main() {
     },
   };
 
-  const result = await model.generateContent([PROMPT_ANALISIS, imagePart]);
+  const prompt = construirPrompt(contexto);
+  const result = await model.generateContent([prompt, imagePart]);
   const datos = JSON.parse(result.response.text());
 
   console.log('Datos extraidos:', datos);
@@ -146,6 +163,7 @@ async function main() {
     ...(datos.capacidad ? { capacidad: datos.capacidad } : {}),
     ...(datos.edicion ? { edicion: datos.edicion } : {}),
     ...(datos.edadRecomendada ? { edadRecomendada: datos.edadRecomendada } : {}),
+    ...(datos.altTexto ? { altTexto: datos.altTexto } : {}),
   };
 
   const creado = await client.create(documento);

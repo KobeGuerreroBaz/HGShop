@@ -35,6 +35,7 @@ const ESQUEMA_RESPUESTA = {
     titulo: { type: SchemaType.STRING },
     marca: { type: SchemaType.STRING, nullable: true },
     descripcion: { type: SchemaType.STRING },
+    altTexto: { type: SchemaType.STRING },
     palabrasClave: {
       type: SchemaType.ARRAY,
       items: { type: SchemaType.STRING },
@@ -43,15 +44,28 @@ const ESQUEMA_RESPUESTA = {
     capacidad: { type: SchemaType.STRING, nullable: true },
     edicion: { type: SchemaType.STRING, nullable: true },
   },
-  required: ['titulo', 'descripcion', 'palabrasClave'],
+  required: ['titulo', 'descripcion', 'altTexto', 'palabrasClave'],
 };
 
-const PROMPT_ANALISIS = `Analiza esta foto de un producto de venta y completa los campos del esquema.
+function construirPrompt(contexto) {
+  let prompt = `Analiza esta foto de un producto de venta y completa los campos del esquema.\n`;
 
+  if (contexto) {
+    prompt += `\nEl vendedor dio este contexto adicional sobre el producto: "${contexto}"\n`;
+  }
+
+  prompt += `
 Reglas importantes:
-- descripcion: basala unicamente en lo que se ve o lee con certeza; si no estas seguro de un material o detalle especifico, no lo menciones.
+- Responde SIEMPRE en español, sin importar el idioma del texto que veas en el empaque, etiqueta o producto.
+- descripcion: escribe en tono de venta, resaltando lo atractivo del producto (calidad, diseno, uso, para quien es ideal) sin exagerar ni inventar cualidades que no se ven o no fueron confirmadas. Nada de frases genericas vacias tipo "producto de excelente calidad" - se especifico sobre que lo hace atractivo.
+- La descripcion tambien debe ayudar a que la pagina aparezca en buscadores como Google: menciona el tipo de producto, marca y caracteristica principal en la primera oracion, usando el lenguaje natural con el que un comprador buscaria este producto (ej. "portagel antibacterial", "wallflower aromatizante", "hot wheels edicion limitada"). No repitas la misma palabra clave de forma forzada ni antinatural, escribe para un humano primero.
+- altTexto: escribe una descripcion breve (maximo 125 caracteres) de LO QUE SE VE EN LA FOTO especificamente - no repitas el titulo tal cual. Menciona color, forma o detalle visible distintivo (ej. "Termo Stanley FlowState azul marino con tapa abatible" en vez de solo "Termo Stanley"). Esto es para el atributo alt de la imagen, pensado para accesibilidad y buscadores de imagenes, no para venta.
+- Si el vendedor dio contexto arriba, tratalo como informacion confirmada y usalo con seguridad en la descripcion.
 - palabrasClave: usa 5 a 8 terminos ESPECIFICOS que un cliente usaria para buscar este producto exacto (marca, modelo, color, personaje, coleccion, caracteristica distintiva). NO incluyas palabras genericas de categoria como "juguete", "producto", "articulo", "accesorio".
-- Los campos marca, edadRecomendada, capacidad y edicion deben ser null si no aplican o no son visibles.`;
+- Los campos marca, edadRecomendada, capacidad y edicion deben ser null si no aplican o no son visibles, a menos que el contexto del vendedor los confirme.`;
+
+  return prompt;
+}
 
 function generarSlug(texto) {
   return texto
@@ -159,12 +173,27 @@ function moverAYaSubido(rutaCarpeta, nombresArchivos) {
   }
 }
 
-async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio, cantidad, manifiesto) {
+function registrarEnManifiesto(rutaCarpeta, fotosDelGrupo, manifiesto, info) {
+  for (const foto of fotosDelGrupo) {
+    const rutaFoto = path.join(rutaCarpeta, foto.archivo);
+    const buffer = fs.readFileSync(rutaFoto);
+    const hash = calcularHash(buffer);
+    manifiesto[hash] = { archivo: foto.archivo, fecha: new Date().toISOString(), ...info };
+  }
+  guardarManifiesto(rutaCarpeta, manifiesto);
+}
+
+async function buscarEnSanityPorHash(hash) {
+  return client.fetch(`*[_type == "producto" && hashFoto == $hash][0]{_id, titulo}`, { hash });
+}
+
+async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio, cantidad, contexto, manifiesto) {
   const primeraFoto = fotosDelGrupo[0].archivo;
   const rutaPrimeraFoto = path.join(rutaCarpeta, primeraFoto);
 
   console.log(`  1. Preparando foto principal (${primeraFoto})...`);
   const imageBufferOriginal = fs.readFileSync(rutaPrimeraFoto);
+  const hashPrincipal = calcularHash(imageBufferOriginal);
   const imageBufferAnalisis = await redimensionarParaAnalisis(imageBufferOriginal);
 
   console.log('  2. Analizando con Gemini...');
@@ -183,7 +212,8 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio,
     },
   };
 
-  const result = await model.generateContent([PROMPT_ANALISIS, imagePart]);
+  const prompt = construirPrompt(contexto);
+  const result = await model.generateContent([prompt, imagePart]);
   const datos = JSON.parse(result.response.text());
 
   console.log(`  Titulo detectado: ${datos.titulo}`);
@@ -223,10 +253,12 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio,
     } : {}),
     categoria: { _type: 'reference', _ref: categoriaId },
     palabrasClave: datos.palabrasClave || [],
+    hashFoto: hashPrincipal,
     ...(datos.marca ? { marca: datos.marca } : {}),
     ...(datos.capacidad ? { capacidad: datos.capacidad } : {}),
     ...(datos.edicion ? { edicion: datos.edicion } : {}),
     ...(datos.edadRecomendada ? { edadRecomendada: datos.edadRecomendada } : {}),
+    ...(datos.altTexto ? { altTexto: datos.altTexto } : {}),
   };
 
   const creado = await client.create(documento);
@@ -236,16 +268,7 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio,
   const textoAviso = avisos.length > 0 ? ` (${avisos.join(', ')}, pendiente de completar)` : '';
   console.log(`  Listo. ID: ${creado._id} | Slug: ${slugFinal}${textoAviso}`);
 
-  // Registramos en el manifiesto el hash de cada foto de este grupo,
-  // ANTES de intentar moverlas. Asi, aunque el movimiento falle o iCloud
-  // restaure el archivo, el script nunca lo va a volver a procesar.
-  for (const foto of fotosDelGrupo) {
-    const rutaFoto = path.join(rutaCarpeta, foto.archivo);
-    const buffer = fs.readFileSync(rutaFoto);
-    const hash = calcularHash(buffer);
-    manifiesto[hash] = { archivo: foto.archivo, productoId: creado._id, fecha: new Date().toISOString() };
-  }
-  guardarManifiesto(rutaCarpeta, manifiesto);
+  registrarEnManifiesto(rutaCarpeta, fotosDelGrupo, manifiesto, { productoId: creado._id });
 
   const nombresDeArchivos = fotosDelGrupo.map((f) => f.archivo);
   moverAYaSubido(rutaCarpeta, nombresDeArchivos);
@@ -280,8 +303,6 @@ async function main() {
     .map((entrada) => entrada.name)
     .filter((nombre) => EXTENSIONES_VALIDAS.includes(path.extname(nombre).toLowerCase()));
 
-  // Filtramos por contenido: si el hash de la foto ya esta en el manifiesto,
-  // la ignoramos aunque el archivo haya reaparecido en la carpeta.
   const archivos = [];
   let ignoradosPorManifiesto = 0;
   for (const nombre of archivosTodos) {
@@ -309,7 +330,7 @@ async function main() {
 
   console.log(`\nEncontrados ${claves.length} producto(s) pendiente(s) (${archivos.length} foto(s) en total).\n`);
 
-  const resultados = { completos: 0, incompletos: 0, fallidos: 0 };
+  const resultados = { completos: 0, incompletos: 0, fallidos: 0, marcadosExistentes: 0 };
 
   for (const clave of claves) {
     const fotosDelGrupo = grupos[clave];
@@ -317,12 +338,34 @@ async function main() {
     console.log(`\n--- Producto: ${clave} (${fotosDelGrupo.length} foto(s): ${nombresFotos}) ---`);
 
     const rutaPrimeraFoto = path.join(rutaCarpeta, fotosDelGrupo[0].archivo);
+    const bufferPrimeraFoto = fs.readFileSync(rutaPrimeraFoto);
+    const hashPrimeraFoto = calcularHash(bufferPrimeraFoto);
+    const existeEnSanity = await buscarEnSanityPorHash(hashPrimeraFoto);
+
+    if (existeEnSanity) {
+      console.log(`  Ya existe en Sanity como "${existeEnSanity.titulo}" (subido desde otro dispositivo). Se omite.`);
+      registrarEnManifiesto(rutaCarpeta, fotosDelGrupo, manifiesto, { nota: 'detectado ya existente en Sanity (subido desde celular u otro origen)' });
+      moverAYaSubido(rutaCarpeta, fotosDelGrupo.map((f) => f.archivo));
+      resultados.marcadosExistentes++;
+      continue;
+    }
+
     abrirFotoEnVistaPrevia(rutaPrimeraFoto);
 
-    const precioTexto = await preguntar(`Precio para "${clave}" (Enter si aun no lo sabes, o "saltar" para omitir por completo): `);
+    const precioTexto = await preguntar(`Precio para "${clave}" (Enter=no lo se, "saltar"=decidir despues, "existe"=ya esta en Sanity, no subir de nuevo): `);
 
-    if (precioTexto.trim().toLowerCase() === 'saltar') {
-      console.log('  Omitido (la foto se queda en la carpeta para procesarla despues).');
+    const respuesta = precioTexto.trim().toLowerCase();
+
+    if (respuesta === 'saltar') {
+      console.log('  Omitido por ahora (la foto se queda en la carpeta, se preguntara de nuevo despues).');
+      continue;
+    }
+
+    if (respuesta === 'existe') {
+      registrarEnManifiesto(rutaCarpeta, fotosDelGrupo, manifiesto, { nota: 'marcado manualmente como ya existente en Sanity' });
+      moverAYaSubido(rutaCarpeta, fotosDelGrupo.map((f) => f.archivo));
+      console.log('  Marcado como ya existente. No se creo ningun producto nuevo. No se volvera a preguntar por esta foto.');
+      resultados.marcadosExistentes++;
       continue;
     }
 
@@ -348,8 +391,11 @@ async function main() {
       }
     }
 
+    const contextoTexto = await preguntar(`Contexto extra para Gemini (Enter para omitir, ej: "es edicion 2019, coleccion limitada"): `);
+    const contexto = contextoTexto.trim() !== '' ? contextoTexto.trim() : null;
+
     try {
-      await procesarProducto(rutaCarpeta, fotosDelGrupo, categoria._id, precio, cantidad, manifiesto);
+      await procesarProducto(rutaCarpeta, fotosDelGrupo, categoria._id, precio, cantidad, contexto, manifiesto);
       if (precio === null || cantidad === null) {
         resultados.incompletos++;
       } else {
@@ -364,6 +410,7 @@ async function main() {
   console.log(`\n=== Resumen ===`);
   console.log(`Creados completos (precio y cantidad): ${resultados.completos}`);
   console.log(`Creados incompletos (falta precio y/o cantidad): ${resultados.incompletos}`);
+  console.log(`Marcados como ya existentes: ${resultados.marcadosExistentes}`);
   console.log(`Fallidos u omitidos: ${resultados.fallidos}`);
 
   rl.close();

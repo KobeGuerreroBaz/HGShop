@@ -5,11 +5,24 @@ import tailwindcss from '@tailwindcss/vite';
 
 import cloudflare from '@astrojs/cloudflare';
 
+import sitemap from '@astrojs/sitemap';
+
 // https://astro.build/config
 export default defineConfig({
+  site: 'https://hgstoremx.com',
+
   vite: {
     plugins: [tailwindcss()]
   },
 
-  adapter: cloudflare()
+  adapter: cloudflare(),
+
+  integrations: [
+    sitemap({
+      filter: (page) =>
+        !page.includes('/subir') &&
+        !page.includes('/precios') &&
+        !page.includes('/pedido'),
+    }),
+  ],
 });

@@ -1,0 +1,105 @@
+---
+interface Props {
+  numeroDefault: string;
+}
+const { numeroDefault } = Astro.props;
+---
+<div id="panel-carrito" data-numero-default={numeroDefault} class="fixed inset-0 z-50 hidden">
+  <div id="overlay-carrito" class="absolute inset-0 bg-black/40"></div>
+  <div class="absolute bottom-0 inset-x-0 bg-white rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-neutral-900">Tu carrito</h2>
+      <button
+        id="btn-cerrar-carrito"
+        type="button"
+        class="text-neutral-400 hover:text-neutral-900 text-2xl leading-none px-2"
+      >&times;</button>
+    </div>
+
+    <ul id="lista-carrito" class="space-y-3 mb-6"></ul>
+    <p id="carrito-vacio" class="text-sm text-neutral-400 text-center py-6 hidden">
+      Todavía no tienes productos en el carrito.
+    </p>
+
+    <button
+      id="btn-enviar-carrito"
+      type="button"
+      class="w-full inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+    >
+      Enviar pedido por WhatsApp
+    </button>
+  </div>
+</div>
+
+<script>
+  import { obtenerCarrito, quitarDelCarrito, construirEnvioCarrito } from '../lib/carrito';
+
+  function renderizarCarrito() {
+    const panel = document.getElementById('panel-carrito');
+    const numeroDefault = panel?.dataset.numeroDefault || '';
+    const lista = document.getElementById('lista-carrito');
+    const vacio = document.getElementById('carrito-vacio');
+    const btnEnviar = document.getElementById('btn-enviar-carrito') as HTMLButtonElement | null;
+    const contador = document.getElementById('contador-carrito');
+
+    const items = obtenerCarrito();
+
+    if (contador) contador.textContent = String(items.length);
+
+    if (!lista || !vacio || !btnEnviar) return;
+
+    lista.innerHTML = '';
+
+    if (items.length === 0) {
+      vacio.classList.remove('hidden');
+      btnEnviar.disabled = true;
+      return;
+    }
+
+    vacio.classList.add('hidden');
+    btnEnviar.disabled = false;
+
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between gap-3';
+      li.innerHTML = `
+        <span class="text-sm text-neutral-900 line-clamp-2">${item.titulo}</span>
+        <button type="button" data-quitar-slug="${item.slug}" class="text-neutral-400 hover:text-red-600 text-lg leading-none px-2">&times;</button>
+      `;
+      lista.appendChild(li);
+    });
+
+    lista.querySelectorAll<HTMLButtonElement>('[data-quitar-slug]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const slug = btn.dataset.quitarSlug!;
+        quitarDelCarrito(slug);
+        document.dispatchEvent(new CustomEvent('carrito-actualizado'));
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderizarCarrito();
+
+    document.getElementById('btn-abrir-carrito')?.addEventListener('click', () => {
+      document.getElementById('panel-carrito')?.classList.remove('hidden');
+    });
+    document.getElementById('btn-cerrar-carrito')?.addEventListener('click', () => {
+      document.getElementById('panel-carrito')?.classList.add('hidden');
+    });
+    document.getElementById('overlay-carrito')?.addEventListener('click', () => {
+      document.getElementById('panel-carrito')?.classList.add('hidden');
+    });
+
+    document.getElementById('btn-enviar-carrito')?.addEventListener('click', () => {
+      const panel = document.getElementById('panel-carrito');
+      const numeroDefault = panel?.dataset.numeroDefault || '';
+      const envio = construirEnvioCarrito(numeroDefault);
+      if (!envio) return;
+      const link = `https://wa.me/${envio.numero}?text=${encodeURIComponent(envio.mensaje)}`;
+      window.open(link, '_blank', 'noopener,noreferrer');
+    });
+  });
+
+  document.addEventListener('carrito-actualizado', renderizarCarrito);
+</script>

@@ -3,9 +3,21 @@ import '../styles/global.css';
 
 interface Props {
   titulo?: string;
+  descripcion?: string;
+  imagen?: string;
+  noIndex?: boolean;
+  canonical?: string;
 }
 
-const { titulo = "HG Shop MX" } = Astro.props;
+const {
+  titulo = "HG Shop MX",
+  descripcion = "Catálogo de productos - HG Shop MX",
+  imagen,
+  noIndex = false,
+  canonical,
+} = Astro.props;
+
+const urlCanonica = canonical || new URL(Astro.url.pathname, Astro.site).toString();
 ---
 <!doctype html>
 <html lang="es">
@@ -16,6 +28,23 @@ const { titulo = "HG Shop MX" } = Astro.props;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <title>{titulo}</title>
+    <meta name="description" content={descripcion} />
+    <link rel="canonical" href={urlCanonica} />
+
+    {noIndex && <meta name="robots" content="noindex, nofollow" />}
+
+    <meta property="og:title" content={titulo} />
+    <meta property="og:description" content={descripcion} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={urlCanonica} />
+    {imagen && <meta property="og:image" content={imagen} />}
+
+    <meta name="twitter:card" content={imagen ? "summary_large_image" : "summary"} />
+    <meta name="twitter:title" content={titulo} />
+    <meta name="twitter:description" content={descripcion} />
+    {imagen && <meta name="twitter:image" content={imagen} />}
+
+    <slot name="head" />
   </head>
   <body class="bg-white text-neutral-900 font-sans antialiased">
     <slot />

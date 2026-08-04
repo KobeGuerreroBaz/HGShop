@@ -1,25 +1,33 @@
 ---
+import { nombreDepartamento } from '../lib/sanity';
+
 interface Props {
   departamentos: string[];
+  configWhatsApp?: { asignaciones: { departamento: string; numero: string; nombreBonito?: string }[] };
 }
-const { departamentos } = Astro.props;
+const { departamentos, configWhatsApp } = Astro.props;
 ---
-<header class="sticky top-0 z-20 bg-white border-b border-neutral-100">
-  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-    <a href="/" class="text-lg font-semibold tracking-tight text-neutral-900">HG Shop</a>
-    <button id="boton-menu" type="button" aria-label="Abrir menú" class="flex flex-col gap-1.5 p-2">
-      <span class="block w-6 h-0.5 bg-neutral-900"></span>
-      <span class="block w-6 h-0.5 bg-neutral-900"></span>
-      <span class="block w-6 h-0.5 bg-neutral-900"></span>
-    </button>
+<header id="header-hg" class="sticky top-0 z-20 bg-white border-b border-neutral-100">
+  <div class="max-w-5xl mx-auto px-6 py-4 grid grid-cols-3 items-center">
+    <div class="justify-self-start">
+      <button id="boton-menu" type="button" aria-label="Abrir menú" class="flex flex-col gap-1.5 p-2">
+        <span class="block w-6 h-0.5 bg-neutral-900"></span>
+        <span class="block w-6 h-0.5 bg-neutral-900"></span>
+        <span class="block w-6 h-0.5 bg-neutral-900"></span>
+      </button>
+    </div>
+    <a href="/" class="justify-self-center text-lg font-semibold tracking-tight text-neutral-900">HG Shop</a>
+    <div class="justify-self-end">
+      <slot name="carrito" />
+    </div>
   </div>
   <nav id="menu-desplegable" class="hidden border-t border-neutral-100">
     <ul class="max-w-5xl mx-auto px-6 py-4 space-y-3">
       <li><a href="/" class="block text-sm font-medium text-neutral-700 hover:text-neutral-900">Inicio</a></li>
       {departamentos.map((depto) => (
         <li>
-          <a href={`/catalogo/${depto}`} class="block text-sm font-medium text-neutral-700 hover:text-neutral-900 capitalize">
-            {depto.replace(/-/g, ' ')}
+          <a href={`/catalogo/${depto}`} class="block text-sm font-medium text-neutral-700 hover:text-neutral-900">
+            {nombreDepartamento(depto, configWhatsApp)}
           </a>
         </li>
       ))}
@@ -34,4 +42,21 @@ const { departamentos } = Astro.props;
   boton?.addEventListener('click', () => {
     menu?.classList.toggle('hidden');
   });
+</script>
+
+<script>
+  function actualizarAlturaHeader() {
+    const header = document.getElementById('header-hg');
+    if (!header) return;
+    document.documentElement.style.setProperty('--alto-header', `${header.offsetHeight}px`);
+  }
+
+  actualizarAlturaHeader();
+  window.addEventListener('resize', actualizarAlturaHeader);
+
+  const header = document.getElementById('header-hg');
+  if (header) {
+    const observador = new ResizeObserver(actualizarAlturaHeader);
+    observador.observe(header);
+  }
 </script>

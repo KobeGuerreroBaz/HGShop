@@ -1,0 +1,612 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout titulo="Subir producto - HG Shop MX" noIndex={true}>
+  <main class="px-4 py-6 max-w-md mx-auto">
+    <div id="pantalla-pin">
+      <h1 class="text-xl font-semibold text-neutral-900">Acceso</h1>
+      <p class="text-sm text-neutral-500 mt-1">Ingresa tu PIN para continuar</p>
+      <input id="input-pin" type="password" inputmode="numeric" class="w-full mt-4 border border-neutral-200 rounded-md px-3 py-2 text-sm" placeholder="PIN" />
+      <button id="boton-pin" type="button" class="w-full mt-3 bg-neutral-900 text-white rounded-md py-3 text-sm font-medium">
+        Entrar
+      </button>
+      <p id="error-pin" class="hidden text-sm text-red-600 mt-2">PIN incorrecto.</p>
+    </div>
+
+    <div id="contenido-principal" class="hidden">
+      <h1 class="text-xl font-semibold text-neutral-900">Armar producto</h1>
+      <p class="text-sm text-neutral-500 mt-1">Agrega 1 o más fotos del mismo producto, luego analiza</p>
+
+      <div class="mt-6">
+        <label class="block">
+          <span class="sr-only">Agregar fotos</span>
+          <input
+            id="input-foto"
+            type="file"
+            accept="image/*"
+            multiple
+            class="block w-full text-sm text-neutral-700 file:mr-4 file:py-3 file:px-4 file:rounded-md file:border-0 file:bg-neutral-900 file:text-white file:text-sm"
+          />
+        </label>
+      </div>
+
+      <div
+        id="zona-pegar"
+        contenteditable="true"
+        class="mt-3 border-2 border-dashed border-neutral-300 rounded-md px-3 py-4 text-sm text-neutral-400 text-center outline-none focus:border-neutral-500 focus:text-neutral-500"
+      >
+        Toca aquí y pega fotos copiadas (⌘V / mantén presionado → Pegar)
+      </div>
+
+      <div id="miniaturas-acumuladas" class="mt-4 grid grid-cols-4 gap-2"></div>
+
+      <div class="mt-4">
+        <label class="text-xs text-neutral-500">Contexto extra (opcional)</label>
+        <textarea
+          id="campo-contexto"
+          rows="2"
+          placeholder="Ej: es edición limitada 2019, el color real es más dorado que en la foto..."
+          class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm mt-1 resize-none overflow-hidden"
+        ></textarea>
+      </div>
+
+      <button
+        id="boton-analizar"
+        type="button"
+        disabled
+        class="hidden mt-4 w-full bg-neutral-900 text-white rounded-md py-3 text-sm font-medium disabled:opacity-40"
+      >
+        Analizar producto (<span id="contador-fotos">0</span> foto(s))
+      </button>
+
+      <div id="tarjeta-actual" class="hidden mt-6 border border-neutral-200 rounded-xl p-4">
+        <img id="preview-foto" class="w-full aspect-square object-cover rounded-lg bg-neutral-50" />
+
+        <div id="estado-analisis" class="mt-3 text-sm text-neutral-500"></div>
+
+        <div id="formulario" class="hidden mt-4 space-y-3">
+          <div>
+            <label class="text-xs text-neutral-500">Título</label>
+            <input id="campo-titulo" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Descripción</label>
+            <textarea id="campo-descripcion" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" rows="6"></textarea>
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Categoría</label>
+            <select id="campo-categoria" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm">
+              <option value="">Selecciona una categoría...</option>
+            </select>
+          </div>
+
+          <div id="nueva-categoria-form" class="hidden border border-neutral-200 rounded-md p-3 space-y-2 bg-neutral-50">
+            <div>
+              <label class="text-xs text-neutral-500">Departamento</label>
+              <select id="campo-nueva-categoria-departamento" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm">
+                <option value="">Selecciona un departamento...</option>
+              </select>
+            </div>
+
+            <div id="nuevo-departamento-form" class="hidden space-y-2 border-b border-neutral-200 pb-2 mb-2">
+              <div>
+                <label class="text-xs text-neutral-500">Nombre del departamento nuevo</label>
+                <input id="campo-nuevo-departamento-nombre" type="text" placeholder="Ej: zapatos" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label class="text-xs text-neutral-500">Nombre para mostrar (con mayúsculas/acentos, ej. "Zapatos Deportivos")</label>
+                <input id="campo-nuevo-departamento-nombre-bonito" type="text" placeholder="Ej: Zapatos Deportivos" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label class="text-xs text-neutral-500">¿Quién atiende este departamento por WhatsApp?</label>
+                <select id="campo-nueva-categoria-whatsapp" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm">
+                  <option value="">Humberto (default)</option>
+                  <option value="528146812034">Esposa</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-neutral-500">Título de la nueva categoría</label>
+              <input id="campo-nueva-categoria-titulo" type="text" placeholder="Ej: Zapatos deportivos" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <button id="boton-crear-categoria" type="button" class="w-full bg-neutral-900 text-white rounded-md py-2 text-sm font-medium">
+                Crear categoría
+              </button>
+              <button id="boton-cancelar-categoria" type="button" class="w-full text-neutral-500 text-sm py-2">
+                Cancelar
+              </button>
+            </div>
+            <p id="error-categoria" class="hidden text-xs text-red-600"></p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-neutral-500">Precio</label>
+              <input id="campo-precio" type="number" placeholder="Opcional" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="text-xs text-neutral-500">Cantidad</label>
+              <input id="campo-cantidad" type="number" placeholder="Opcional" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Marca</label>
+            <input id="campo-marca" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+
+          <button id="boton-guardar" type="button" class="w-full bg-neutral-900 text-white rounded-md py-3 text-sm font-medium">
+            Guardar producto
+          </button>
+          <button id="boton-cancelar" type="button" class="w-full text-neutral-500 text-sm py-2">
+            Cancelar y empezar de nuevo
+          </button>
+        </div>
+      </div>
+
+      <div id="mensaje-guardado" class="hidden mt-6 text-center text-sm text-green-700 bg-green-50 rounded-md py-3"></div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  const CLAVE_STORAGE = 'hgshop-upload-pin';
+  let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
+
+  const pantallaPin = document.getElementById('pantalla-pin') as HTMLElement;
+  const contenidoPrincipal = document.getElementById('contenido-principal') as HTMLElement;
+  const inputPin = document.getElementById('input-pin') as HTMLInputElement;
+  const botonPin = document.getElementById('boton-pin') as HTMLButtonElement;
+  const errorPin = document.getElementById('error-pin') as HTMLElement;
+
+  async function verificarPin(pin: string): Promise<boolean> {
+    const respuesta = await fetch('/api/verificar-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const resultado: { ok: boolean } = await respuesta.json();
+    return resultado.ok;
+  }
+
+  async function mostrarContenidoSiHayAcceso() {
+    if (pinGuardado && (await verificarPin(pinGuardado))) {
+      pantallaPin.classList.add('hidden');
+      contenidoPrincipal.classList.remove('hidden');
+      cargarCategorias();
+    }
+  }
+  mostrarContenidoSiHayAcceso();
+
+  botonPin.addEventListener('click', async () => {
+    const valor = inputPin.value.trim();
+    const valido = await verificarPin(valor);
+    if (valido) {
+      localStorage.setItem(CLAVE_STORAGE, valor);
+      pinGuardado = valor;
+      pantallaPin.classList.add('hidden');
+      contenidoPrincipal.classList.remove('hidden');
+      cargarCategorias();
+    } else {
+      errorPin.classList.remove('hidden');
+    }
+  });
+
+  function headersConPin() {
+    return { 'x-upload-pin': pinGuardado };
+  }
+
+  let fotosAcumuladas: File[] = [];
+  let categorias: { _id: string; titulo: string; departamento: string }[] = [];
+  let datosExtraidos: any = null;
+  let blobPrincipalComprimido: Blob | null = null;
+  let blobsGaleriaComprimidos: Blob[] = [];
+  let hashPrincipal = '';
+  let analisisEnProceso = false;
+
+  const inputFoto = document.getElementById('input-foto') as HTMLInputElement;
+  const zonaPegar = document.getElementById('zona-pegar') as HTMLElement;
+  const miniaturasAcumuladas = document.getElementById('miniaturas-acumuladas') as HTMLElement;
+  const campoContexto = document.getElementById('campo-contexto') as HTMLTextAreaElement;
+  const botonAnalizar = document.getElementById('boton-analizar') as HTMLButtonElement;
+  const contadorFotos = document.getElementById('contador-fotos') as HTMLElement;
+  const tarjetaActual = document.getElementById('tarjeta-actual') as HTMLElement;
+  const previewFoto = document.getElementById('preview-foto') as HTMLImageElement;
+  const estadoAnalisis = document.getElementById('estado-analisis') as HTMLElement;
+  const formulario = document.getElementById('formulario') as HTMLElement;
+  const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement;
+  const campoDescripcion = document.getElementById('campo-descripcion') as HTMLTextAreaElement;
+  const campoCategoria = document.getElementById('campo-categoria') as unknown as HTMLSelectElement;
+  const nuevaCategoriaForm = document.getElementById('nueva-categoria-form') as HTMLElement;
+  const campoNuevaCategoriaTitulo = document.getElementById('campo-nueva-categoria-titulo') as HTMLInputElement;
+  const campoNuevaCategoriaDepartamento = document.getElementById('campo-nueva-categoria-departamento') as unknown as HTMLSelectElement;
+  const nuevoDepartamentoForm = document.getElementById('nuevo-departamento-form') as HTMLElement;
+  const campoNuevoDepartamentoNombre = document.getElementById('campo-nuevo-departamento-nombre') as HTMLInputElement;
+  const campoNuevoDepartamentoNombreBonito = document.getElementById('campo-nuevo-departamento-nombre-bonito') as HTMLInputElement;
+  const campoNuevaCategoriaWhatsapp = document.getElementById('campo-nueva-categoria-whatsapp') as unknown as HTMLSelectElement;
+  const botonCrearCategoria = document.getElementById('boton-crear-categoria') as HTMLButtonElement;
+  const botonCancelarCategoria = document.getElementById('boton-cancelar-categoria') as HTMLButtonElement;
+  const errorCategoria = document.getElementById('error-categoria') as HTMLElement;
+  const campoPrecio = document.getElementById('campo-precio') as HTMLInputElement;
+  const campoCantidad = document.getElementById('campo-cantidad') as HTMLInputElement;
+  const campoMarca = document.getElementById('campo-marca') as HTMLInputElement;
+  const botonGuardar = document.getElementById('boton-guardar') as HTMLButtonElement;
+  const botonCancelar = document.getElementById('boton-cancelar') as HTMLButtonElement;
+  const mensajeGuardado = document.getElementById('mensaje-guardado') as HTMLElement;
+
+  const VALOR_NUEVA_CATEGORIA = '__nueva__';
+  const VALOR_NUEVO_DEPARTAMENTO = '__nuevo_departamento__';
+
+  function ajustarAlturaTextarea(textarea: HTMLTextAreaElement) {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }
+
+  campoContexto.addEventListener('input', () => ajustarAlturaTextarea(campoContexto));
+
+  function reconstruirSelectCategorias() {
+    campoCategoria.innerHTML = '<option value="">Selecciona una categoría...</option>';
+    const categoriasOrdenadas = [...categorias].sort((a, b) => {
+      const deptoComparacion = a.departamento.localeCompare(b.departamento);
+      if (deptoComparacion !== 0) return deptoComparacion;
+      return a.titulo.localeCompare(b.titulo);
+    });
+    for (const cat of categoriasOrdenadas) {
+      const opcion = document.createElement('option');
+      opcion.value = cat._id;
+      opcion.textContent = `${cat.departamento} — ${cat.titulo}`;
+      campoCategoria.appendChild(opcion);
+    }
+    const opcionNueva = document.createElement('option');
+    opcionNueva.value = VALOR_NUEVA_CATEGORIA;
+    opcionNueva.textContent = '+ Crear categoría nueva';
+    campoCategoria.appendChild(opcionNueva);
+  }
+
+  function reconstruirSelectDepartamentos() {
+    const departamentosUnicos = Array.from(new Set(categorias.map((c) => c.departamento))).sort();
+    campoNuevaCategoriaDepartamento.innerHTML = '<option value="">Selecciona un departamento...</option>';
+    for (const depto of departamentosUnicos) {
+      const opcion = document.createElement('option');
+      opcion.value = depto;
+      opcion.textContent = depto;
+      campoNuevaCategoriaDepartamento.appendChild(opcion);
+    }
+    const opcionNuevo = document.createElement('option');
+    opcionNuevo.value = VALOR_NUEVO_DEPARTAMENTO;
+    opcionNuevo.textContent = '+ Crear departamento nuevo';
+    campoNuevaCategoriaDepartamento.appendChild(opcionNuevo);
+  }
+
+  async function cargarCategorias() {
+    const respuesta = await fetch('/api/categorias', { headers: headersConPin() });
+    categorias = await respuesta.json();
+    reconstruirSelectCategorias();
+    reconstruirSelectDepartamentos();
+  }
+
+  campoCategoria.addEventListener('change', () => {
+    if (campoCategoria.value === VALOR_NUEVA_CATEGORIA) {
+      nuevaCategoriaForm.classList.remove('hidden');
+      errorCategoria.classList.add('hidden');
+    } else {
+      nuevaCategoriaForm.classList.add('hidden');
+    }
+  });
+
+  campoNuevaCategoriaDepartamento.addEventListener('change', () => {
+    const esNuevo = campoNuevaCategoriaDepartamento.value === VALOR_NUEVO_DEPARTAMENTO;
+    nuevoDepartamentoForm.classList.toggle('hidden', !esNuevo);
+    if (!esNuevo) {
+      campoNuevoDepartamentoNombre.value = '';
+      campoNuevoDepartamentoNombreBonito.value = '';
+      campoNuevaCategoriaWhatsapp.value = '';
+    }
+  });
+
+  botonCancelarCategoria.addEventListener('click', () => {
+    campoNuevaCategoriaTitulo.value = '';
+    campoNuevaCategoriaDepartamento.value = '';
+    campoNuevoDepartamentoNombre.value = '';
+    campoNuevoDepartamentoNombreBonito.value = '';
+    campoNuevaCategoriaWhatsapp.value = '';
+    nuevoDepartamentoForm.classList.add('hidden');
+    errorCategoria.classList.add('hidden');
+    nuevaCategoriaForm.classList.add('hidden');
+    campoCategoria.value = '';
+  });
+
+  botonCrearCategoria.addEventListener('click', async () => {
+    const titulo = campoNuevaCategoriaTitulo.value.trim();
+    const seleccionDepartamento = campoNuevaCategoriaDepartamento.value;
+    const esDepartamentoNuevo = seleccionDepartamento === VALOR_NUEVO_DEPARTAMENTO;
+    const departamento = esDepartamentoNuevo
+      ? campoNuevoDepartamentoNombre.value.trim()
+      : seleccionDepartamento;
+    const numeroWhatsApp = esDepartamentoNuevo ? campoNuevaCategoriaWhatsapp.value.trim() : '';
+    const nombreDepartamento = esDepartamentoNuevo ? campoNuevoDepartamentoNombreBonito.value.trim() : '';
+
+    if (!titulo || !departamento) {
+      errorCategoria.textContent = 'Elige o escribe un departamento y completa el título.';
+      errorCategoria.classList.remove('hidden');
+      return;
+    }
+
+    botonCrearCategoria.disabled = true;
+    botonCrearCategoria.textContent = 'Creando...';
+
+    const respuesta = await fetch('/api/crear-categoria', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headersConPin() },
+      body: JSON.stringify({ titulo, departamento, numeroWhatsApp, nombreDepartamento }),
+    });
+    const resultado: { ok?: boolean; _id?: string; titulo?: string; departamento?: string; error?: string } = await respuesta.json();
+
+    botonCrearCategoria.disabled = false;
+    botonCrearCategoria.textContent = 'Crear categoría';
+
+    if (!resultado.ok) {
+      errorCategoria.textContent = resultado.error || 'No se pudo crear la categoría.';
+      errorCategoria.classList.remove('hidden');
+      return;
+    }
+
+    categorias.push({ _id: resultado._id!, titulo: resultado.titulo!, departamento: resultado.departamento! });
+    reconstruirSelectCategorias();
+    reconstruirSelectDepartamentos();
+    campoCategoria.value = resultado._id!;
+
+    campoNuevaCategoriaTitulo.value = '';
+    campoNuevaCategoriaDepartamento.value = '';
+    campoNuevoDepartamentoNombre.value = '';
+    campoNuevoDepartamentoNombreBonito.value = '';
+    campoNuevaCategoriaWhatsapp.value = '';
+    nuevoDepartamentoForm.classList.add('hidden');
+    errorCategoria.classList.add('hidden');
+    nuevaCategoriaForm.classList.add('hidden');
+  });
+
+  function actualizarMiniaturas() {
+    miniaturasAcumuladas.innerHTML = '';
+    fotosAcumuladas.forEach((archivo, indice) => {
+      const contenedor = document.createElement('div');
+      contenedor.className = 'relative aspect-square rounded-lg overflow-hidden bg-neutral-50 border border-neutral-100';
+
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(archivo);
+      img.className = 'w-full h-full object-cover';
+      contenedor.appendChild(img);
+
+      if (indice === 0) {
+        const etiqueta = document.createElement('span');
+        etiqueta.textContent = 'Principal';
+        etiqueta.className = 'absolute top-1 left-1 bg-neutral-900 text-white text-[10px] px-1.5 py-0.5 rounded';
+        contenedor.appendChild(etiqueta);
+      }
+
+      const botonQuitar = document.createElement('button');
+      botonQuitar.textContent = '×';
+      botonQuitar.className = 'absolute top-1 right-1 bg-white/90 rounded-full w-5 h-5 text-sm leading-none';
+      botonQuitar.addEventListener('click', () => {
+        fotosAcumuladas.splice(indice, 1);
+        actualizarMiniaturas();
+      });
+      contenedor.appendChild(botonQuitar);
+
+      miniaturasAcumuladas.appendChild(contenedor);
+    });
+
+    contadorFotos.textContent = String(fotosAcumuladas.length);
+    if (fotosAcumuladas.length > 0) {
+      botonAnalizar.classList.remove('hidden');
+      botonAnalizar.disabled = false;
+    } else {
+      botonAnalizar.classList.add('hidden');
+    }
+  }
+
+  inputFoto.addEventListener('change', () => {
+    const archivos = Array.from(inputFoto.files || []);
+    fotosAcumuladas.push(...archivos);
+    inputFoto.value = '';
+    actualizarMiniaturas();
+  });
+
+  zonaPegar.addEventListener('paste', (evento: ClipboardEvent) => {
+    evento.preventDefault();
+
+    const items = evento.clipboardData?.items;
+    if (!items) return;
+
+    const imagenesNuevas: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const archivo = item.getAsFile();
+        if (archivo) imagenesNuevas.push(archivo);
+      }
+    }
+
+    if (imagenesNuevas.length > 0) {
+      fotosAcumuladas.push(...imagenesNuevas);
+      actualizarMiniaturas();
+    }
+
+    zonaPegar.textContent = 'Toca aquí y pega fotos copiadas (⌘V / mantén presionado → Pegar)';
+    zonaPegar.blur();
+  });
+
+  async function comprimirImagen(archivo: File | Blob, maxDimension: number, calidad: number): Promise<Blob> {
+    const bitmap = await createImageBitmap(archivo);
+    let { width, height } = bitmap;
+
+    if (width > maxDimension || height > maxDimension) {
+      const factor = Math.min(maxDimension / width, maxDimension / height);
+      width = Math.round(width * factor);
+      height = Math.round(height * factor);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const contexto = canvas.getContext('2d');
+    contexto?.drawImage(bitmap, 0, 0, width, height);
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob as Blob), 'image/jpeg', calidad);
+    });
+  }
+
+  async function calcularHash(archivo: File | Blob): Promise<string> {
+    const buffer = await archivo.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  botonAnalizar.addEventListener('click', async () => {
+    if (fotosAcumuladas.length === 0 || analisisEnProceso) return;
+
+    analisisEnProceso = true;
+    botonAnalizar.disabled = true;
+    const textoOriginalBoton = botonAnalizar.textContent;
+    botonAnalizar.textContent = 'Analizando, espera...';
+
+    tarjetaActual.classList.remove('hidden');
+    formulario.classList.add('hidden');
+    mensajeGuardado.classList.add('hidden');
+    tarjetaActual.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    try {
+      const fotoPrincipalOriginal = fotosAcumuladas[0];
+      previewFoto.src = URL.createObjectURL(fotoPrincipalOriginal);
+      estadoAnalisis.textContent = 'Verificando si ya se proceso esta foto...';
+
+      hashPrincipal = await calcularHash(fotoPrincipalOriginal);
+
+      const respuestaHash = await fetch('/api/verificar-hash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headersConPin() },
+        body: JSON.stringify({ hash: hashPrincipal }),
+      });
+      const resultadoHash: { existe: boolean; producto: { titulo: string } | null } = await respuestaHash.json();
+
+      if (resultadoHash.existe) {
+        estadoAnalisis.textContent = `Ya existe como "${resultadoHash.producto?.titulo}". No se creara de nuevo.`;
+        return;
+      }
+
+      estadoAnalisis.textContent = 'Comprimiendo fotos...';
+      blobPrincipalComprimido = await comprimirImagen(fotoPrincipalOriginal, 1600, 0.85);
+      blobsGaleriaComprimidos = [];
+      for (let i = 1; i < fotosAcumuladas.length; i++) {
+        const comprimida = await comprimirImagen(fotosAcumuladas[i], 1600, 0.85);
+        blobsGaleriaComprimidos.push(comprimida);
+      }
+
+      estadoAnalisis.textContent = 'Analizando con IA...';
+
+      const formData = new FormData();
+      formData.append('foto', blobPrincipalComprimido, 'foto.jpg');
+      if (campoContexto.value.trim()) {
+        formData.append('contexto', campoContexto.value.trim());
+      }
+
+      const respuestaAnalisis = await fetch('/api/analizar', {
+        method: 'POST',
+        headers: headersConPin(),
+        body: formData,
+      });
+      datosExtraidos = await respuestaAnalisis.json();
+
+      if (datosExtraidos.error) {
+        estadoAnalisis.textContent = `Error al analizar: ${datosExtraidos.error}`;
+        return;
+      }
+
+      estadoAnalisis.textContent = 'Revisa y completa los datos:';
+      campoTitulo.value = datosExtraidos.titulo || '';
+      campoDescripcion.value = datosExtraidos.descripcion || '';
+      campoMarca.value = datosExtraidos.marca || '';
+      campoPrecio.value = '';
+      campoCantidad.value = '';
+      formulario.classList.remove('hidden');
+    } catch (error: any) {
+      estadoAnalisis.textContent = `Ocurrió un error inesperado: ${error.message}. Intenta de nuevo.`;
+    } finally {
+      analisisEnProceso = false;
+      botonAnalizar.disabled = false;
+      botonAnalizar.textContent = textoOriginalBoton;
+    }
+  });
+
+  botonGuardar.addEventListener('click', async () => {
+    if (!campoCategoria.value || campoCategoria.value === VALOR_NUEVA_CATEGORIA) {
+      alert('Elige o crea una categoría antes de guardar.');
+      return;
+    }
+    if (!blobPrincipalComprimido) {
+      alert('La foto todavia se esta procesando, espera un momento.');
+      return;
+    }
+
+    botonGuardar.disabled = true;
+    botonGuardar.textContent = 'Guardando...';
+
+    const formData = new FormData();
+    formData.append('fotoPrincipal', blobPrincipalComprimido, 'foto.jpg');
+    blobsGaleriaComprimidos.forEach((blob, i) => {
+      formData.append('fotoGaleria', blob, `galeria-${i}.jpg`);
+    });
+    formData.append('titulo', campoTitulo.value);
+    formData.append('descripcion', campoDescripcion.value);
+    formData.append('palabrasClave', JSON.stringify(datosExtraidos.palabrasClave || []));
+    formData.append('categoriaId', campoCategoria.value);
+    formData.append('hash', hashPrincipal);
+    if (campoPrecio.value) formData.append('precio', campoPrecio.value);
+    if (campoCantidad.value) formData.append('cantidad', campoCantidad.value);
+    if (campoMarca.value) formData.append('marca', campoMarca.value);
+    if (datosExtraidos.capacidad) formData.append('capacidad', datosExtraidos.capacidad);
+    if (datosExtraidos.edicion) formData.append('edicion', datosExtraidos.edicion);
+    if (datosExtraidos.edadRecomendada) formData.append('edadRecomendada', datosExtraidos.edadRecomendada);
+    if (datosExtraidos.altTexto) formData.append('altTexto', datosExtraidos.altTexto);
+
+    const respuesta = await fetch('/api/crear-producto', {
+      method: 'POST',
+      headers: headersConPin(),
+      body: formData,
+    });
+    const resultado: { ok: boolean; id: string; slug: string; error?: string } = await respuesta.json();
+
+    botonGuardar.disabled = false;
+    botonGuardar.textContent = 'Guardar producto';
+
+    if (resultado.ok) {
+      mensajeGuardado.textContent = `Producto "${campoTitulo.value}" guardado con éxito.`;
+      mensajeGuardado.classList.remove('hidden');
+      reiniciarParaSiguienteProducto();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      alert(`Error al guardar: ${resultado.error}`);
+    }
+  });
+
+  botonCancelar.addEventListener('click', () => {
+    reiniciarParaSiguienteProducto();
+  });
+
+  function reiniciarParaSiguienteProducto() {
+    fotosAcumuladas = [];
+    blobPrincipalComprimido = null;
+    blobsGaleriaComprimidos = [];
+    datosExtraidos = null;
+    hashPrincipal = '';
+    campoContexto.value = '';
+    campoContexto.style.height = 'auto';
+    nuevaCategoriaForm.classList.add('hidden');
+    actualizarMiniaturas();
+    tarjetaActual.classList.add('hidden');
+    formulario.classList.add('hidden');
+  }
+</script>

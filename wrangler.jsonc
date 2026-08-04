@@ -1,7 +1,9 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"compatibility_date": "2026-07-20",
-	"compatibility_flags": ["global_fetch_strictly_public"],
+	"compatibility_flags": [
+		"global_fetch_strictly_public"
+	],
 	"name": "hgshop",
 	"main": "@astrojs/cloudflare/entrypoints/server",
 	"assets": {
@@ -10,5 +12,25 @@
 	},
 	"observability": {
 		"enabled": true
-	}
+	},
+	"routes": [
+		{
+			"pattern": "hgstoremx.com",
+			"zone_name": "hgstoremx.com",
+			"custom_domain": true,
+			"enabled": true,
+			"previews_enabled": false
+		}
+	],
+	"vars": {
+		"SANITY_PROJECT_ID": "lit3j3pr"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "SESSION",
+			"id": "32b3fae3378f49fbaefaa7b2b96b4f5f"
+		}
+	],
+	"workers_dev": true,
+	"preview_urls": true
 }
