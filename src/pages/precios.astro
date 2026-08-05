@@ -33,6 +33,13 @@ import Layout from '../layouts/Layout.astro';
       <div id="lista-departamentos" class="mt-4 space-y-2"></div>
     </div>
 
+    <div id="pantalla-lista-productos" class="hidden">
+      <button id="boton-volver-lista-a-departamentos" type="button" class="text-xs text-neutral-400 underline">← Elegir otro departamento</button>
+      <h1 class="text-xl font-semibold text-neutral-900 mt-2">Productos sin precio</h1>
+      <p id="contador-lista" class="text-sm text-neutral-500 mt-1"></p>
+      <div id="lista-productos-sin-precio" class="mt-4 space-y-2"></div>
+    </div>
+
     <div id="pantalla-busqueda" class="hidden">
       <button id="boton-volver-modo-2" type="button" class="text-xs text-neutral-400 underline">← Cambiar modo</button>
       <h1 class="text-xl font-semibold text-neutral-900 mt-2">Buscar producto</h1>
@@ -41,7 +48,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div id="pantalla-producto" class="hidden">
-      <button id="boton-volver-departamento" type="button" class="hidden text-xs text-neutral-400 underline">← Elegir otro departamento</button>
+      <button id="boton-volver-departamento" type="button" class="hidden text-xs text-neutral-400 underline">← Volver a la lista</button>
       <button id="boton-volver-busqueda" type="button" class="hidden text-xs text-neutral-400 underline">← Buscar otro producto</button>
       <p id="contador" class="text-sm text-neutral-500 mt-2"></p>
 
@@ -90,7 +97,7 @@ import Layout from '../layouts/Layout.astro';
             Saltar
           </button>
           <button id="boton-guardar" type="button" class="w-full bg-neutral-900 text-white rounded-md py-3 text-sm font-medium">
-            Guardar y siguiente
+            Guardar
           </button>
         </div>
       </div>
@@ -126,6 +133,11 @@ import Layout from '../layouts/Layout.astro';
   const botonVolverModo2 = document.getElementById('boton-volver-modo-2') as HTMLButtonElement;
 
   const listaDepartamentos = document.getElementById('lista-departamentos') as HTMLElement;
+
+  const pantallaListaProductos = document.getElementById('pantalla-lista-productos') as HTMLElement;
+  const botonVolverListaADepartamentos = document.getElementById('boton-volver-lista-a-departamentos') as HTMLButtonElement;
+  const contadorLista = document.getElementById('contador-lista') as HTMLElement;
+  const listaProductosSinPrecio = document.getElementById('lista-productos-sin-precio') as HTMLElement;
 
   const campoBusqueda = document.getElementById('campo-busqueda') as HTMLInputElement;
   const resultadosBusqueda = document.getElementById('resultados-busqueda') as HTMLElement;
@@ -165,9 +177,15 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function mostrarPantalla(pantalla: HTMLElement) {
-    [pantallaPin, pantallaModo, pantallaDepartamento, pantallaBusqueda, pantallaProducto, pantallaFin].forEach((p) =>
-      p.classList.add('hidden')
-    );
+    [
+      pantallaPin,
+      pantallaModo,
+      pantallaDepartamento,
+      pantallaListaProductos,
+      pantallaBusqueda,
+      pantallaProducto,
+      pantallaFin,
+    ].forEach((p) => p.classList.add('hidden'));
     pantalla.classList.remove('hidden');
   }
 
@@ -192,7 +210,6 @@ import Layout from '../layouts/Layout.astro';
 
   let modoActual: 'faltantes' | 'busqueda' = 'faltantes';
   let productosPendientes: any[] = [];
-  let indiceActual = 0;
 
   botonModoFaltantes.addEventListener('click', () => {
     modoActual = 'faltantes';
@@ -237,24 +254,55 @@ import Layout from '../layouts/Layout.astro';
   }
 
   async function iniciarFlujoDepartamento(departamento: string) {
-    mostrarPantalla(pantallaProducto);
-    prepararUiParaModo();
-    tarjeta.classList.add('hidden');
+    mostrarPantalla(pantallaListaProductos);
+    listaProductosSinPrecio.innerHTML = '<p class="text-sm text-neutral-400">Cargando...</p>';
+    contadorLista.textContent = '';
 
     const respuesta = await fetch(`/api/productos-sin-precio?departamento=${encodeURIComponent(departamento)}`, {
       headers: headersConPin(),
     });
     productosPendientes = await respuesta.json();
-    indiceActual = 0;
 
+    mostrarListaProductos();
+  }
+
+  function mostrarListaProductos() {
     if (productosPendientes.length === 0) {
       mostrarPantalla(pantallaFin);
       return;
     }
 
-    tarjeta.classList.remove('hidden');
-    renderizarProducto(productosPendientes[indiceActual]);
+    mostrarPantalla(pantallaListaProductos);
+    renderizarListaProductos();
   }
+
+  function renderizarListaProductos() {
+    contadorLista.textContent = `${productosPendientes.length} producto${productosPendientes.length !== 1 ? 's' : ''} sin precio`;
+    listaProductosSinPrecio.innerHTML = '';
+
+    productosPendientes.forEach((producto) => {
+      const fila = document.createElement('button');
+      fila.type = 'button';
+      fila.className = 'w-full flex items-center gap-3 border border-neutral-200 rounded-md p-2 text-left';
+      fila.innerHTML = `
+        <img src="${producto.imagenUrl || ''}" class="w-12 h-12 object-contain rounded bg-neutral-50" />
+        <span class="flex-1 text-sm text-neutral-900 line-clamp-2">${producto.titulo}</span>
+      `;
+      fila.addEventListener('click', () => abrirProductoDesdeLista(producto));
+      listaProductosSinPrecio.appendChild(fila);
+    });
+  }
+
+  function abrirProductoDesdeLista(producto: any) {
+    mostrarPantalla(pantallaProducto);
+    prepararUiParaModo();
+    renderizarProducto(producto);
+  }
+
+  botonVolverListaADepartamentos.addEventListener('click', () => {
+    mostrarPantalla(pantallaDepartamento);
+    cargarDepartamentos();
+  });
 
   // ---- Búsqueda (modo: actualizar precios) ----
   let temporizadorBusqueda: ReturnType<typeof setTimeout>;
@@ -313,7 +361,7 @@ import Layout from '../layouts/Layout.astro';
       filaBotones.classList.remove('grid-cols-1');
       filaBotones.classList.add('grid-cols-2');
       botonSaltar.classList.remove('hidden');
-      botonGuardar.textContent = 'Guardar y siguiente';
+      botonGuardar.textContent = 'Guardar';
     } else {
       botonVolverDepartamento.classList.add('hidden');
       botonVolverBusqueda.classList.remove('hidden');
@@ -327,8 +375,7 @@ import Layout from '../layouts/Layout.astro';
   }
 
   botonVolverDepartamento.addEventListener('click', () => {
-    mostrarPantalla(pantallaDepartamento);
-    cargarDepartamentos();
+    mostrarListaProductos();
   });
   botonVolverBusqueda.addEventListener('click', () => {
     mostrarPantalla(pantallaBusqueda);
@@ -340,7 +387,7 @@ import Layout from '../layouts/Layout.astro';
 
   function renderizarProducto(producto: any) {
     if (modoActual === 'faltantes') {
-      contador.textContent = `Producto ${indiceActual + 1} de ${productosPendientes.length} sin precio`;
+      contador.textContent = `${productosPendientes.length} sin precio en este departamento`;
     }
     imagenProducto.src = producto.imagenUrl || '';
     tituloProducto.textContent = producto.titulo || '';
@@ -365,15 +412,6 @@ import Layout from '../layouts/Layout.astro';
     detallesOpcionales.classList.toggle('hidden');
     botonMostrarDetalles.textContent = oculto ? '- Ocultar detalles' : '+ Agregar más detalles';
   });
-
-  function avanzarSiguiente() {
-    indiceActual++;
-    if (indiceActual >= productosPendientes.length) {
-      mostrarPantalla(pantallaFin);
-    } else {
-      renderizarProducto(productosPendientes[indiceActual]);
-    }
-  }
 
   async function guardarProducto() {
     const productoId = (tarjeta as any).dataset.productoId;
@@ -410,12 +448,13 @@ import Layout from '../layouts/Layout.astro';
     }
 
     if (modoActual === 'faltantes') {
-      avanzarSiguiente();
+      productosPendientes = productosPendientes.filter((p) => p._id !== productoId);
+      mostrarListaProductos();
     } else {
       mostrarPantalla(pantallaBusqueda);
     }
   }
 
   botonGuardar.addEventListener('click', guardarProducto);
-  botonSaltar.addEventListener('click', avanzarSiguiente);
+  botonSaltar.addEventListener('click', () => mostrarListaProductos());
 </script>

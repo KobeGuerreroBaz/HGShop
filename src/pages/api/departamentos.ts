@@ -23,12 +23,23 @@ export const GET: APIRoute = async ({ request }) => {
   });
 
   try {
-    const departamentos: string[] = await client.fetch(
-      `array::unique(*[_type == "producto" && !defined(precio) && defined(categoria->departamento)].categoria->departamento)`
+    const productosSinPrecio: { departamento: string }[] = await client.fetch(
+      `*[_type == "producto" && !defined(precio) && defined(categoria->departamento)]{
+        "departamento": categoria->departamento
+      }`
     );
 
-    const resultado = departamentos
-      .map((slug) => ({ slug, nombre: nombreDepartamento(slug) }))
+    const conteoPorDepartamento = new Map<string, number>();
+    productosSinPrecio.forEach(({ departamento }) => {
+      conteoPorDepartamento.set(departamento, (conteoPorDepartamento.get(departamento) || 0) + 1);
+    });
+
+    const resultado = Array.from(conteoPorDepartamento.entries())
+      .map(([departamento, totalSinPrecio]) => ({
+        departamento,
+        nombre: nombreDepartamento(departamento),
+        totalSinPrecio,
+      }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
     return new Response(JSON.stringify(resultado), {

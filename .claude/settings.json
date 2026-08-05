@@ -31,7 +31,10 @@
       "Bash(grep -o 'fetchpriority=\"high\"' __TRACKED_VAR__/index-perf.html)",
       "Bash(curl -s -D - -o /dev/null -H 'Accept: image/avif,image/webp,image/*,*/*' 'https://cdn.sanity.io/images/lit3j3pr/production/7a501bdde355dff3e4415a27531eca677a00e7f2-1200x1600.jpg?rect=0,200,1200,1200&w=200&h=200&fit=crop&auto=format')",
       "Bash(curl -s -D - -o /dev/null -H 'Accept: image/jpeg,image/png,*/*' 'https://cdn.sanity.io/images/lit3j3pr/production/7a501bdde355dff3e4415a27531eca677a00e7f2-1200x1600.jpg?rect=0,200,1200,1200&w=200&h=200&fit=crop&auto=format')",
-      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=390,900 --screenshot=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/perf-fix-mobile.png http://localhost:4321/)"
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=390,900 --screenshot=/private/tmp/claude-501/-Users-humbertoguerrerobazaldua-Desktop-hgshop/00113162-1aef-4348-9068-f9d4c189499b/scratchpad/perf-fix-mobile.png http://localhost:4321/)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P)",
+      "Bash(curl -s http://localhost:4321/api/departamentos -H \"x-upload-pin: 0000\")",
+      "Bash(curl -s -o /dev/null -w \"status /precios: %{http_code}\\\\n\" http://localhost:4321/precios)"
     ]
   }
 }
