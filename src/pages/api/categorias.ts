@@ -1,25 +1,12 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
-import { createClient } from '@sanity/client';
-import { env } from 'cloudflare:workers';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
 
 export const GET: APIRoute = async ({ request }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'categorias');
+  if (bloqueo) return bloqueo;
 
-  const client = createClient({
-    projectId: env.SANITY_PROJECT_ID,
-    dataset: 'production',
-    apiVersion: '2024-01-01',
-    token: env.SANITY_API_TOKEN,
-    useCdn: false,
-  });
+  const client = sanityClientEscritura();
 
   try {
     const categorias = await client.fetch(`
@@ -30,10 +17,8 @@ export const GET: APIRoute = async ({ request }) => {
       } | order(departamento asc, titulo asc)
     `);
 
-    return new Response(JSON.stringify(categorias), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonOk(categorias);
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };

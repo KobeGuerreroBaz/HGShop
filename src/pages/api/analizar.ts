@@ -2,11 +2,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { env } from 'cloudflare:workers';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { jsonError, jsonOk, verificarAcceso } from '../../lib/api-utils';
 
 function bufferABase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -58,16 +54,15 @@ Reglas importantes:
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'analizar');
+  if (bloqueo) return bloqueo;
 
   const formData = await request.formData();
   const archivo = formData.get('foto') as File | null;
   const contexto = formData.get('contexto') as string | null;
 
   if (!archivo) {
-    return new Response(JSON.stringify({ error: 'No se recibio ninguna foto' }), { status: 400 });
+    return jsonError('No se recibio ninguna foto');
   }
 
   try {
@@ -94,10 +89,8 @@ export const POST: APIRoute = async ({ request }) => {
     const result = await model.generateContent([prompt, imagePart]);
     const datos = JSON.parse(result.response.text());
 
-    return new Response(JSON.stringify(datos), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonOk(datos);
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };

@@ -1,12 +1,7 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
-import { createClient } from '@sanity/client';
-import { env } from 'cloudflare:workers';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { NUMERO_WHATSAPP_DEFAULT } from '../../lib/sanity';
+import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
 
 function generarSlug(texto: string) {
   return texto
@@ -20,9 +15,8 @@ function generarSlug(texto: string) {
 const CONFIG_WHATSAPP_ID = 'configuracionWhatsApp';
 
 export const POST: APIRoute = async ({ request }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'crear-categoria');
+  if (bloqueo) return bloqueo;
 
   try {
     const { titulo, departamento, numeroWhatsApp, nombreDepartamento } = await request.json() as {
@@ -33,19 +27,13 @@ export const POST: APIRoute = async ({ request }) => {
     };
 
     if (!titulo || !titulo.trim()) {
-      return new Response(JSON.stringify({ error: 'El titulo de la categoria es requerido' }), { status: 400 });
+      return jsonError('El titulo de la categoria es requerido');
     }
     if (!departamento || !departamento.trim()) {
-      return new Response(JSON.stringify({ error: 'El departamento es requerido' }), { status: 400 });
+      return jsonError('El departamento es requerido');
     }
 
-    const client = createClient({
-      projectId: env.SANITY_PROJECT_ID,
-      dataset: 'production',
-      apiVersion: '2024-01-01',
-      token: env.SANITY_API_TOKEN,
-      useCdn: false,
-    });
+    const client = sanityClientEscritura();
 
     const departamentoSlug = generarSlug(departamento);
     const tituloSlug = generarSlug(titulo.trim());
@@ -64,7 +52,7 @@ export const POST: APIRoute = async ({ request }) => {
       await client.createIfNotExists({
         _id: CONFIG_WHATSAPP_ID,
         _type: 'configuracionWhatsApp',
-        numeroDefault: '528123207311',
+        numeroDefault: NUMERO_WHATSAPP_DEFAULT,
         asignaciones: [],
       });
 
@@ -98,11 +86,8 @@ export const POST: APIRoute = async ({ request }) => {
       await client.patch(CONFIG_WHATSAPP_ID).set({ asignaciones: nuevasAsignaciones }).commit();
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, _id: creada._id, titulo: creada.titulo, departamento: creada.departamento }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    return jsonOk({ ok: true, _id: creada._id, titulo: creada.titulo, departamento: creada.departamento });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };

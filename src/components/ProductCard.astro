@@ -19,7 +19,7 @@ const linkProducto = `https://hgstoremx.com/productos/${slug}`;
 const mensaje = `Hola, me interesa: ${titulo}${edicion ? ` (${edicion})` : ''}\n\n${linkProducto}`;
 const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
 
-const imageUrl = urlFor(imagenPrincipal).width(400).url();
+const imageUrl = urlFor(imagenPrincipal).width(400).auto('format').url();
 const textoAlt = altTexto || titulo;
 ---
 <div class="w-full" data-tarjeta-producto>

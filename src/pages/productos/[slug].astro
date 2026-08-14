@@ -63,15 +63,15 @@ const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(
 
 const linkVolverRespaldo = `/catalogo/${producto.categoriaDepartamento}`;
 
-const imagenPrincipalUrl = urlFor(producto.imagenPrincipal).width(800).url();
+const imagenPrincipalUrl = urlFor(producto.imagenPrincipal).width(800).auto('format').url();
 
 const galeria = (producto.galeria || []).map((img: any) => ({
-  miniatura: urlFor(img).width(200).url(),
-  completa: urlFor(img).width(800).url(),
+  miniatura: urlFor(img).width(200).auto('format').url(),
+  completa: urlFor(img).width(800).auto('format').url(),
 }));
 
 const todasLasFotos = [
-  { miniatura: urlFor(producto.imagenPrincipal).width(200).url(), completa: imagenPrincipalUrl },
+  { miniatura: urlFor(producto.imagenPrincipal).width(200).auto('format').url(), completa: imagenPrincipalUrl },
   ...galeria,
 ];
 

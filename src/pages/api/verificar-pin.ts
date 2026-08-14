@@ -1,13 +1,16 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
+import { demasiadasSolicitudes, excedeLimite, jsonOk } from '../../lib/api-utils';
 
 export const POST: APIRoute = async ({ request }) => {
-  const { pin } = await request.json();
+  if (await excedeLimite(request, 'verificar-pin')) {
+    return demasiadasSolicitudes();
+  }
+
+  const { pin } = (await request.json()) as { pin?: string };
 
   const correcto = pin === env.UPLOAD_PIN;
 
-  return new Response(JSON.stringify({ ok: correcto }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return jsonOk({ ok: correcto });
 };

@@ -1,17 +1,10 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
-import { createClient } from '@sanity/client';
-import { env } from 'cloudflare:workers';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
 
 export const POST: APIRoute = async ({ request }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'actualizar-precio');
+  if (bloqueo) return bloqueo;
 
   try {
     const datos = (await request.json()) as {
@@ -26,18 +19,12 @@ export const POST: APIRoute = async ({ request }) => {
     const { id, precio, cantidad, marca, palabrasClave, mostrarExistencias, agotado } = datos;
 
     if (!id) {
-      return new Response(JSON.stringify({ error: 'Falta id' }), { status: 400 });
+      return jsonError('Falta id');
     }
 
-    const client = createClient({
-      projectId: env.SANITY_PROJECT_ID,
-      dataset: 'production',
-      apiVersion: '2024-01-01',
-      token: env.SANITY_API_TOKEN,
-      useCdn: false,
-    });
+    const client = sanityClientEscritura();
 
-    const cambios: any = {};
+    const cambios: Record<string, unknown> = {};
     if (precio !== undefined && precio !== null && precio !== '') {
       cambios.precio = Number(precio);
     }
@@ -56,15 +43,13 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     if (Object.keys(cambios).length === 0) {
-      return new Response(JSON.stringify({ error: 'No hay cambios que guardar' }), { status: 400 });
+      return jsonError('No hay cambios que guardar');
     }
 
     await client.patch(id).set(cambios).commit();
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonOk({ ok: true });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };

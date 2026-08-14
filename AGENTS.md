@@ -13,8 +13,8 @@ storefront is statically generated from it.
 
 - **Astro 7** for the storefront, mostly static-generated pages, Tailwind v4 via `@tailwindcss/vite`
 - **Sanity** as the CMS — a separate sub-project in `sanity/` with its own `package.json` and Studio config
-- **Cloudflare Workers** as the deploy target (`@astrojs/cloudflare` adapter + Wrangler); a KV namespace
-  `SESSION` is declared in `wrangler.jsonc` but not currently used by any code
+- **Cloudflare Workers** as the deploy target (`@astrojs/cloudflare` adapter + Wrangler); the KV namespace
+  `SESSION` declared in `wrangler.jsonc` backs the per-IP rate limiting in `src/lib/api-utils.ts`
 - **Google Gemini** (`@google/generative-ai`, model `gemini-flash-lite-latest`) generates product copy
   (title, description, alt text, keywords) from a product photo, both in the admin upload flow and in the
   standalone `scripts/`
@@ -86,12 +86,20 @@ through `/precios` before a product is expected to be seen publicly.
 - `productos/[slug].astro` — statically generated per product; photo gallery, JSON-LD `Product` +
   `BreadcrumbList` structured data, WhatsApp deep link
 - `pedido.astro` — SSR (`export const prerender = false`) order summary. Reads `?productos=slug1,slug2` (built
-  by the cart) and re-fetches those products from Sanity to render a summary + total
+  by the cart) and re-fetches those products from Sanity to render a summary + total. Because this re-fetch
+  happens server-side on the Cloudflare Worker on every request (not baked into static HTML, and not a
+  browser-side fetch either), the `titulo`, `precio`, `imagenPrincipal` and `edicion` it queries always reflect
+  whatever is currently in Sanity — e.g. a price edited through `/precios` shows up here immediately, no
+  rebuild/redeploy needed. This is the one customer-facing exception to the "prerendered, needs a redeploy"
+  rule below.
 - `subir.astro`, `precios.astro` — internal admin tools, see below
 
 Public pages are prerendered against Sanity content at build time — there's no ISR/on-demand revalidation, so
-content changes need a rebuild/redeploy to go live. The admin pages and all of `src/pages/api/*` are SSR
-(`prerender = false`).
+content changes need a rebuild/redeploy to go live **before customers see them on `index.astro`,
+`catalogo/[departamento].astro`, or `productos/[slug].astro`** — a price edited through `/precios` will not
+appear on the product page or category grid until the next deploy. `pedido.astro` (above) is the sole exception
+among public-facing pages. The admin pages and all of `src/pages/api/*` are also SSR (`prerender = false`) and
+therefore always current, but they aren't what a customer browsing the catalog sees.
 
 ### Cart (`src/lib/carrito.ts`, `BotonCarrito`/`PanelCarrito`/`ProductCard`)
 
@@ -106,8 +114,9 @@ and the WhatsApp message links to `/pedido?productos=...` rather than listing pr
 
 Not a real auth system — every API route is gated by a single shared PIN (`UPLOAD_PIN`, a Cloudflare secret set
 via `wrangler secret put`, not present in `wrangler.jsonc` vars or `.env`) checked against the `x-upload-pin`
-request header by a `pinValido()` helper duplicated in each route. `verificar-pin.ts` just echoes whether a
-submitted PIN is correct, for the client-side PIN screen.
+request header by `verificarAcceso()` in `src/lib/api-utils.ts`, which also rate-limits by IP+route (30
+req/60s via the `SESSION` KV) before checking the PIN. `verificar-pin.ts` just echoes whether a submitted PIN
+is correct, for the client-side PIN screen.
 
 - `subir.astro` — upload flow: pick/paste photos → `POST /api/analizar` (Gemini fills título/descripción/
   altTexto/palabrasClave from the image plus optional free-text context) → pick or create a category/department

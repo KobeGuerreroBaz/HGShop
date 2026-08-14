@@ -1,12 +1,6 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
-import { createClient } from '@sanity/client';
-import { env } from 'cloudflare:workers';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
 
 function generarSlug(texto: string) {
   return texto
@@ -22,16 +16,15 @@ function sufijoUnico(assetId: string) {
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'crear-producto');
+  if (bloqueo) return bloqueo;
 
   try {
     const formData = await request.formData();
 
-    const fotoPrincipal = formData.get('fotoPrincipal') as File;
+    const fotoPrincipal = formData.get('fotoPrincipal') as File | null;
     const fotosGaleria = formData.getAll('fotoGaleria') as File[];
-    const titulo = formData.get('titulo') as string;
+    const titulo = formData.get('titulo') as string | null;
     const descripcion = formData.get('descripcion') as string;
     const altTexto = formData.get('altTexto') as string | null;
     const palabrasClave = JSON.parse((formData.get('palabrasClave') as string) || '[]');
@@ -39,18 +32,25 @@ export const POST: APIRoute = async ({ request }) => {
     const capacidad = formData.get('capacidad') as string | null;
     const edicion = formData.get('edicion') as string | null;
     const edadRecomendada = formData.get('edadRecomendada') as string | null;
-    const categoriaId = formData.get('categoriaId') as string;
+    const categoriaId = formData.get('categoriaId') as string | null;
     const precioTexto = formData.get('precio') as string | null;
     const cantidadTexto = formData.get('cantidad') as string | null;
-    const hash = formData.get('hash') as string;
+    const hash = formData.get('hash') as string | null;
 
-    const client = createClient({
-      projectId: env.SANITY_PROJECT_ID,
-      dataset: 'production',
-      apiVersion: '2024-01-01',
-      token: env.SANITY_API_TOKEN,
-      useCdn: false,
-    });
+    if (!fotoPrincipal || !(fotoPrincipal instanceof File) || fotoPrincipal.size === 0) {
+      return jsonError('Falta la foto principal');
+    }
+    if (!titulo || !titulo.trim()) {
+      return jsonError('El título es requerido');
+    }
+    if (!categoriaId) {
+      return jsonError('La categoría es requerida');
+    }
+    if (!hash) {
+      return jsonError('Falta el hash de la foto');
+    }
+
+    const client = sanityClientEscritura();
 
     const bufferPrincipal = await fotoPrincipal.arrayBuffer();
     const assetPrincipal = await client.assets.upload('image', new Uint8Array(bufferPrincipal) as any, {
@@ -101,10 +101,8 @@ export const POST: APIRoute = async ({ request }) => {
 
     const creado = await client.create(documento);
 
-    return new Response(JSON.stringify({ ok: true, id: creado._id, slug: slugFinal }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonOk({ ok: true, id: creado._id, slug: slugFinal });
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };

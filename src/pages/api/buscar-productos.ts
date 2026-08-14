@@ -1,31 +1,19 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
-import { createClient } from '@sanity/client';
-import { env } from 'cloudflare:workers';
 import imageUrlBuilder from '@sanity/image-url';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
+import type { ProductoParaAdmin } from '../../lib/tipos';
 
 export const GET: APIRoute = async ({ request, url }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'buscar-productos');
+  if (bloqueo) return bloqueo;
 
   const q = url.searchParams.get('q') || '';
   if (q.trim().length < 2) {
-    return new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } });
+    return jsonOk([]);
   }
 
-  const client = createClient({
-    projectId: env.SANITY_PROJECT_ID,
-    dataset: 'production',
-    apiVersion: '2024-01-01',
-    token: env.SANITY_API_TOKEN,
-    useCdn: false,
-  });
+  const client = sanityClientEscritura();
 
   const builder = imageUrlBuilder(client);
   function urlFor(source: any) {
@@ -51,15 +39,21 @@ export const GET: APIRoute = async ({ request, url }) => {
       { patron }
     );
 
-    const productosConImagen = productos.map((p: any) => ({
-      ...p,
-      imagenUrl: p.imagenPrincipal ? urlFor(p.imagenPrincipal).width(200).url() : null,
+    const productosConImagen: ProductoParaAdmin[] = productos.map((p: any) => ({
+      _id: p._id,
+      titulo: p.titulo,
+      precio: p.precio,
+      cantidadDisponible: p.cantidadDisponible,
+      marca: p.marca,
+      palabrasClave: p.palabrasClave,
+      mostrarExistencias: p.mostrarExistencias,
+      agotado: p.agotado,
+      categoriaTitulo: p.categoriaTitulo,
+      imagenUrl: p.imagenPrincipal ? urlFor(p.imagenPrincipal).width(200).auto('format').url() : null,
     }));
 
-    return new Response(JSON.stringify(productosConImagen), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonOk(productosConImagen);
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };

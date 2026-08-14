@@ -14,6 +14,11 @@ export function urlFor(source: any) {
   return builder.image(source);
 }
 
+// Número de WhatsApp de Humberto: se usa cuando configuracionWhatsApp no tiene
+// numeroDefault en Sanity (documento aún no creado) o no hay asignación para el
+// departamento. Vive en un solo lugar para no desincronizarse entre archivos.
+export const NUMERO_WHATSAPP_DEFAULT = '528123207311';
+
 interface AsignacionWhatsApp {
   departamento: string;
   numero: string;
@@ -34,7 +39,7 @@ export async function obtenerConfiguracionWhatsApp(): Promise<ConfiguracionWhats
   `);
 
   return {
-    numeroDefault: config?.numeroDefault || '528123207311',
+    numeroDefault: config?.numeroDefault || NUMERO_WHATSAPP_DEFAULT,
     asignaciones: config?.asignaciones || [],
   };
 }

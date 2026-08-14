@@ -37,7 +37,7 @@ import Layout from '../layouts/Layout.astro';
       <button id="boton-volver-lista-a-departamentos" type="button" class="text-xs text-neutral-400 underline">← Elegir otro departamento</button>
       <h1 class="text-xl font-semibold text-neutral-900 mt-2">Productos sin precio</h1>
       <p id="contador-lista" class="text-sm text-neutral-500 mt-1"></p>
-      <div id="lista-productos-sin-precio" class="mt-4 space-y-2"></div>
+      <div id="lista-productos-sin-precio" class="mt-4 grid grid-cols-3 gap-3"></div>
     </div>
 
     <div id="pantalla-busqueda" class="hidden">
@@ -113,6 +113,8 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script>
+  import type { DepartamentoConConteo, ProductoParaAdmin } from '../lib/tipos';
+
   const CLAVE_STORAGE = 'hgshop-upload-pin';
   let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
 
@@ -209,7 +211,7 @@ import Layout from '../layouts/Layout.astro';
   });
 
   let modoActual: 'faltantes' | 'busqueda' = 'faltantes';
-  let productosPendientes: any[] = [];
+  let productosPendientes: ProductoParaAdmin[] = [];
 
   botonModoFaltantes.addEventListener('click', () => {
     modoActual = 'faltantes';
@@ -231,7 +233,7 @@ import Layout from '../layouts/Layout.astro';
   async function cargarDepartamentos() {
     listaDepartamentos.innerHTML = '<p class="text-sm text-neutral-400">Cargando...</p>';
     const respuesta = await fetch('/api/departamentos', { headers: headersConPin() });
-    const departamentos: { departamento: string; nombre: string; totalSinPrecio: number }[] = await respuesta.json();
+    const departamentos: DepartamentoConConteo[] = await respuesta.json();
 
     listaDepartamentos.innerHTML = '';
 
@@ -244,10 +246,17 @@ import Layout from '../layouts/Layout.astro';
       const boton = document.createElement('button');
       boton.type = 'button';
       boton.className = 'w-full flex items-center justify-between border border-neutral-200 rounded-xl px-4 py-3 text-left';
-      boton.innerHTML = `
-        <span class="font-medium text-neutral-900">${depto.nombre}</span>
-        <span class="text-xs text-neutral-500">${depto.totalSinPrecio} sin precio</span>
-      `;
+
+      const nombreSpan = document.createElement('span');
+      nombreSpan.className = 'font-medium text-neutral-900';
+      nombreSpan.textContent = depto.nombre;
+
+      const totalSpan = document.createElement('span');
+      totalSpan.className = 'text-xs text-neutral-500';
+      totalSpan.textContent = `${depto.totalSinPrecio} sin precio`;
+
+      boton.appendChild(nombreSpan);
+      boton.appendChild(totalSpan);
       boton.addEventListener('click', () => iniciarFlujoDepartamento(depto.departamento));
       listaDepartamentos.appendChild(boton);
     });
@@ -281,19 +290,26 @@ import Layout from '../layouts/Layout.astro';
     listaProductosSinPrecio.innerHTML = '';
 
     productosPendientes.forEach((producto) => {
-      const fila = document.createElement('button');
-      fila.type = 'button';
-      fila.className = 'w-full flex items-center gap-3 border border-neutral-200 rounded-md p-2 text-left';
-      fila.innerHTML = `
-        <img src="${producto.imagenUrl || ''}" class="w-12 h-12 object-contain rounded bg-neutral-50" />
-        <span class="flex-1 text-sm text-neutral-900 line-clamp-2">${producto.titulo}</span>
-      `;
-      fila.addEventListener('click', () => abrirProductoDesdeLista(producto));
-      listaProductosSinPrecio.appendChild(fila);
+      const tarjeta = document.createElement('button');
+      tarjeta.type = 'button';
+      tarjeta.className = 'flex flex-col items-center gap-1.5 border border-neutral-200 rounded-lg p-2 text-center';
+
+      const img = document.createElement('img');
+      img.src = producto.imagenUrl || '';
+      img.className = 'w-full aspect-square object-contain rounded bg-neutral-50';
+
+      const nombre = document.createElement('span');
+      nombre.className = 'text-xs text-neutral-900 line-clamp-2';
+      nombre.textContent = producto.titulo;
+
+      tarjeta.appendChild(img);
+      tarjeta.appendChild(nombre);
+      tarjeta.addEventListener('click', () => abrirProductoDesdeLista(producto));
+      listaProductosSinPrecio.appendChild(tarjeta);
     });
   }
 
-  function abrirProductoDesdeLista(producto: any) {
+  function abrirProductoDesdeLista(producto: ProductoParaAdmin) {
     mostrarPantalla(pantallaProducto);
     prepararUiParaModo();
     renderizarProducto(producto);
@@ -321,7 +337,7 @@ import Layout from '../layouts/Layout.astro';
       const respuesta = await fetch(`/api/buscar-productos?q=${encodeURIComponent(texto)}`, {
         headers: headersConPin(),
       });
-      const resultados: any[] = await respuesta.json();
+      const resultados: ProductoParaAdmin[] = await respuesta.json();
 
       resultadosBusqueda.innerHTML = '';
       if (resultados.length === 0) {
@@ -333,20 +349,33 @@ import Layout from '../layouts/Layout.astro';
         const fila = document.createElement('button');
         fila.type = 'button';
         fila.className = 'w-full flex items-center gap-3 border border-neutral-200 rounded-md p-2 text-left';
-        fila.innerHTML = `
-          <img src="${producto.imagenUrl || ''}" class="w-12 h-12 object-contain rounded bg-neutral-50" />
-          <span class="flex-1">
-            <span class="block text-sm text-neutral-900">${producto.titulo}</span>
-            <span class="block text-xs text-neutral-500">${producto.precio ? `$${producto.precio} MXN` : 'Sin precio'}${producto.agotado ? ' · 🚫 Agotado' : ''}</span>
-          </span>
-        `;
+
+        const img = document.createElement('img');
+        img.src = producto.imagenUrl || '';
+        img.className = 'w-12 h-12 object-contain rounded bg-neutral-50';
+
+        const columna = document.createElement('span');
+        columna.className = 'flex-1';
+
+        const tituloSpan = document.createElement('span');
+        tituloSpan.className = 'block text-sm text-neutral-900';
+        tituloSpan.textContent = producto.titulo;
+
+        const detalleSpan = document.createElement('span');
+        detalleSpan.className = 'block text-xs text-neutral-500';
+        detalleSpan.textContent = `${producto.precio ? `$${producto.precio} MXN` : 'Sin precio'}${producto.agotado ? ' · 🚫 Agotado' : ''}`;
+
+        columna.appendChild(tituloSpan);
+        columna.appendChild(detalleSpan);
+        fila.appendChild(img);
+        fila.appendChild(columna);
         fila.addEventListener('click', () => abrirProductoDesdeBusqueda(producto));
         resultadosBusqueda.appendChild(fila);
       });
     }, 300);
   });
 
-  function abrirProductoDesdeBusqueda(producto: any) {
+  function abrirProductoDesdeBusqueda(producto: ProductoParaAdmin) {
     mostrarPantalla(pantallaProducto);
     prepararUiParaModo();
     renderizarProducto(producto);
@@ -385,7 +414,7 @@ import Layout from '../layouts/Layout.astro';
     cargarDepartamentos();
   });
 
-  function renderizarProducto(producto: any) {
+  function renderizarProducto(producto: ProductoParaAdmin) {
     if (modoActual === 'faltantes') {
       contador.textContent = `${productosPendientes.length} sin precio en este departamento`;
     }
@@ -393,10 +422,10 @@ import Layout from '../layouts/Layout.astro';
     tituloProducto.textContent = producto.titulo || '';
     categoriaProducto.textContent = producto.categoriaTitulo || '';
 
-    campoPrecio.value = producto.precio ?? '';
+    campoPrecio.value = producto.precio != null ? String(producto.precio) : '';
     campoExistencias.checked = !!producto.mostrarExistencias;
     campoAgotado.checked = !!producto.agotado;
-    campoCantidad.value = producto.cantidadDisponible ?? '';
+    campoCantidad.value = producto.cantidadDisponible != null ? String(producto.cantidadDisponible) : '';
     campoMarca.value = producto.marca || '';
     campoPalabras.value = (producto.palabrasClave || []).join(', ');
     detallesOpcionales.classList.add('hidden');

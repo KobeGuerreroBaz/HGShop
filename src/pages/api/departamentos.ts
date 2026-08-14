@@ -1,26 +1,14 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
-import { createClient } from '@sanity/client';
-import { env } from 'cloudflare:workers';
 import { nombreDepartamento } from '../../lib/sanity';
-
-function pinValido(request: Request) {
-  const pin = request.headers.get('x-upload-pin');
-  return pin === env.UPLOAD_PIN;
-}
+import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
+import type { DepartamentoConConteo } from '../../lib/tipos';
 
 export const GET: APIRoute = async ({ request }) => {
-  if (!pinValido(request)) {
-    return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 401 });
-  }
+  const bloqueo = await verificarAcceso(request, 'departamentos');
+  if (bloqueo) return bloqueo;
 
-  const client = createClient({
-    projectId: env.SANITY_PROJECT_ID,
-    dataset: 'production',
-    apiVersion: '2024-01-01',
-    token: env.SANITY_API_TOKEN,
-    useCdn: false,
-  });
+  const client = sanityClientEscritura();
 
   try {
     const productosSinPrecio: { departamento: string }[] = await client.fetch(
@@ -34,7 +22,7 @@ export const GET: APIRoute = async ({ request }) => {
       conteoPorDepartamento.set(departamento, (conteoPorDepartamento.get(departamento) || 0) + 1);
     });
 
-    const resultado = Array.from(conteoPorDepartamento.entries())
+    const resultado: DepartamentoConConteo[] = Array.from(conteoPorDepartamento.entries())
       .map(([departamento, totalSinPrecio]) => ({
         departamento,
         nombre: nombreDepartamento(departamento),
@@ -42,10 +30,8 @@ export const GET: APIRoute = async ({ request }) => {
       }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-    return new Response(JSON.stringify(resultado), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonOk(resultado);
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return jsonError(error.message, 500);
   }
 };
