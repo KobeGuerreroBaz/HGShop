@@ -15,7 +15,7 @@ interface Props {
 
 const { slug, titulo, precio, imagenPrincipal, descripcion, altTexto, edicion, numeroWhatsApp, agotado } = Astro.props;
 
-const linkProducto = `https://hgstoremx.com/productos/${slug}`;
+const linkProducto = `https://hgstoremx.com/productos/${slug}/`;
 const mensaje = `Hola, me interesa: ${titulo}${edicion ? ` (${edicion})` : ''}\n\n${linkProducto}`;
 const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
 
@@ -23,7 +23,7 @@ const imageUrl = urlFor(imagenPrincipal).width(400).auto('format').url();
 const textoAlt = altTexto || titulo;
 ---
 <div class="w-full" data-tarjeta-producto>
-  <a href={`/productos/${slug}`} class="block">
+  <a href={`/productos/${slug}/`} class="block">
     <div class="aspect-square w-full overflow-hidden rounded-lg bg-neutral-50 border border-neutral-100 relative">
       <img
         src={imageUrl}

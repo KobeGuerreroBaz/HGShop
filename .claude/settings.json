@@ -94,7 +94,10 @@
       "Bash(lsof -iTCP:4321,4323 -sTCP:LISTEN -P)",
       "Bash(rm -f /tmp/wrangler.jsonc.bak *)",
       "Bash(curl -s \"http://localhost:4321/productos/crema-corporal-bath-body-works-champagne-toast-x1600jpg\")",
-      "Bash(rm -f /tmp/deploys.json)"
+      "Bash(rm -f /tmp/deploys.json)",
+      "Bash(curl -s -D - -o /dev/null \"https://hgstoremx.com/catalogo/hot-wheels\")",
+      "Bash(curl -s -D - -o /dev/null \"https://hgstoremx.com/catalogo/hot-wheels/\")",
+      "Bash(grep -rn \"catalogo/\\\\$\\\\|catalogo/'\\\\|'/catalogo\\\\|\\\\\"/catalogo\\\\|href=\\\\\"/catalogo\" src --include=\"*.astro\" --include=\"*.ts\")"
     ],
     "deny": [
       "Bash(npm run deploy*)",

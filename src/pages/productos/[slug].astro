@@ -57,11 +57,11 @@ const configWhatsApp = await obtenerConfiguracionWhatsApp();
 const numeroWhatsApp = numeroWhatsAppParaDepartamento(producto.categoriaDepartamento, configWhatsApp);
 const nombreDepartamentoTexto = nombreDepartamento(producto.categoriaDepartamento, configWhatsApp);
 
-const linkProducto = `https://hgstoremx.com/productos/${slug}`;
+const linkProducto = `https://hgstoremx.com/productos/${slug}/`;
 const mensaje = `Hola, me interesa: ${producto.titulo}${producto.edicion ? ` (${producto.edicion})` : ''}\n\n${linkProducto}`;
 const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
 
-const linkVolverRespaldo = `/catalogo/${producto.categoriaDepartamento}`;
+const linkVolverRespaldo = `/catalogo/${producto.categoriaDepartamento}/`;
 
 const imagenPrincipalUrl = urlFor(producto.imagenPrincipal).width(800).auto('format').url();
 
@@ -92,13 +92,17 @@ const datosEstructurados = {
   image: [imagenPrincipalUrl, ...galeria.map((g: { completa: string }) => g.completa)],
   description: descripcionMeta,
   ...(producto.marca ? { brand: { '@type': 'Brand', name: producto.marca } } : {}),
-  offers: {
-    '@type': 'Offer',
-    url: linkProducto,
-    priceCurrency: 'MXN',
-    price: producto.precio,
-    availability: disponibilidad,
-  },
+  ...(producto.precio != null
+    ? {
+        offers: {
+          '@type': 'Offer',
+          url: linkProducto,
+          priceCurrency: 'MXN',
+          price: producto.precio,
+          availability: disponibilidad,
+        },
+      }
+    : {}),
 };
 
 const datosBreadcrumb = {
@@ -115,7 +119,7 @@ const datosBreadcrumb = {
       '@type': 'ListItem',
       position: 2,
       name: nombreDepartamentoTexto,
-      item: `https://hgstoremx.com/catalogo/${producto.categoriaDepartamento}`,
+      item: `https://hgstoremx.com/catalogo/${producto.categoriaDepartamento}/`,
     },
     {
       '@type': 'ListItem',

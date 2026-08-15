@@ -52,7 +52,7 @@ const total = productosOrdenados.reduce((suma: number, p: any) => suma + (p.prec
             />
           </div>
           <div class="flex-1 min-w-0">
-            <a href={`/productos/${producto.slug}`} class="text-sm font-medium text-neutral-900 hover:underline line-clamp-2">
+            <a href={`/productos/${producto.slug}/`} class="text-sm font-medium text-neutral-900 hover:underline line-clamp-2">
               {producto.titulo}{producto.edicion ? ` (${producto.edicion})` : ''}
             </a>
             <p class="text-sm text-neutral-600 mt-1">${producto.precio} MXN</p>

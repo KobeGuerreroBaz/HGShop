@@ -18,7 +18,13 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join('; ');
 
-export const onRequest = defineMiddleware(async (_context, next) => {
+export const onRequest = defineMiddleware(async (context, next) => {
+  const url = new URL(context.request.url);
+  if (import.meta.env.PROD && url.protocol === 'http:') {
+    url.protocol = 'https:';
+    return Response.redirect(url.toString(), 301);
+  }
+
   const response = await next();
 
   response.headers.set('Content-Security-Policy', CSP);

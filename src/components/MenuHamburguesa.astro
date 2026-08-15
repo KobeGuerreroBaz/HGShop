@@ -26,7 +26,7 @@ const { departamentos, configWhatsApp } = Astro.props;
       <li><a href="/" class="block text-sm font-medium text-neutral-700 hover:text-neutral-900">Inicio</a></li>
       {departamentos.map((depto) => (
         <li>
-          <a href={`/catalogo/${depto}`} class="block text-sm font-medium text-neutral-700 hover:text-neutral-900">
+          <a href={`/catalogo/${depto}/`} class="block text-sm font-medium text-neutral-700 hover:text-neutral-900">
             {nombreDepartamento(depto, configWhatsApp)}
           </a>
         </li>

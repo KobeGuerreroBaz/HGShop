@@ -31,6 +31,6 @@
 			"id": "32b3fae3378f49fbaefaa7b2b96b4f5f"
 		}
 	],
-	"workers_dev": true,
-	"preview_urls": true
+	"workers_dev": false,
+	"preview_urls": false
 }
