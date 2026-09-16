@@ -97,7 +97,9 @@
       "Bash(rm -f /tmp/deploys.json)",
       "Bash(curl -s -D - -o /dev/null \"https://hgstoremx.com/catalogo/hot-wheels\")",
       "Bash(curl -s -D - -o /dev/null \"https://hgstoremx.com/catalogo/hot-wheels/\")",
-      "Bash(grep -rn \"catalogo/\\\\$\\\\|catalogo/'\\\\|'/catalogo\\\\|\\\\\"/catalogo\\\\|href=\\\\\"/catalogo\" src --include=\"*.astro\" --include=\"*.ts\")"
+      "Bash(grep -rn \"catalogo/\\\\$\\\\|catalogo/'\\\\|'/catalogo\\\\|\\\\\"/catalogo\\\\|href=\\\\\"/catalogo\" src --include=\"*.astro\" --include=\"*.ts\")",
+      "Bash(curl -s -D - -o /dev/null \"http://hgstoremx.com/\")",
+      "Bash(curl -s -D - -o /dev/null \"http://hgstoremx.com/?cb=$\\(date +%s%N\\)\")"
     ],
     "deny": [
       "Bash(npm run deploy*)",
