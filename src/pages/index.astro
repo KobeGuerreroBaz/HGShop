@@ -184,8 +184,7 @@ const datosOrganizacion = {
   const contadorResultados = document.getElementById('contador-resultados');
   const sinResultados = document.getElementById('sin-resultados');
 
-  input?.addEventListener('input', () => {
-    const query = input.value.trim().toLowerCase();
+  function aplicarBusqueda(query: string, actualizarUrl = true) {
     const hayBusqueda = query !== '';
 
     if (tarjetasDepartamentos) {
@@ -193,6 +192,18 @@ const datosOrganizacion = {
     }
     if (resultadosBusqueda) {
       resultadosBusqueda.classList.toggle('hidden', !hayBusqueda);
+    }
+
+    // Reflejar la búsqueda en la URL (?q=...) sin recargar la página, para que
+    // el link se pueda copiar y compartir tal cual.
+    if (actualizarUrl) {
+      const url = new URL(window.location.href);
+      if (hayBusqueda) {
+        url.searchParams.set('q', query);
+      } else {
+        url.searchParams.delete('q');
+      }
+      window.history.replaceState({}, '', url);
     }
 
     if (!hayBusqueda) return;
@@ -212,7 +223,19 @@ const datosOrganizacion = {
     if (sinResultados) {
       sinResultados.classList.toggle('hidden', visibles > 0);
     }
+  }
+
+  input?.addEventListener('input', () => {
+    aplicarBusqueda(input.value.trim().toLowerCase());
   });
+
+  // Si alguien abre un link con ?q=algo (por ejemplo el que tú compartiste),
+  // precargar esa búsqueda automáticamente al entrar a la página.
+  const queryInicial = new URLSearchParams(window.location.search).get('q');
+  if (queryInicial && input) {
+    input.value = queryInicial;
+    aplicarBusqueda(queryInicial.toLowerCase(), false);
+  }
 </script>
 
 <script>
