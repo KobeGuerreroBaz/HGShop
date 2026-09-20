@@ -13,11 +13,7 @@ interface Props {
   agotado?: boolean;
 }
 
-const { slug, titulo, precio, imagenPrincipal, descripcion, altTexto, edicion, numeroWhatsApp, agotado } = Astro.props;
-
-const linkProducto = `https://hgstoremx.com/productos/${slug}/`;
-const mensaje = `Hola, me interesa: ${titulo}${edicion ? ` (${edicion})` : ''}\n\n${linkProducto}`;
-const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
+const { slug, titulo, precio, imagenPrincipal, descripcion, altTexto, numeroWhatsApp, agotado } = Astro.props;
 
 const imageUrl = urlFor(imagenPrincipal).width(400).auto('format').url();
 const textoAlt = altTexto || titulo;
@@ -44,67 +40,31 @@ const textoAlt = altTexto || titulo;
       AGOTADO
     </div>
   ) : (
-    <>
-      <div class="mt-2 flex gap-2">
-        <a
-          href={linkWhatsApp}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-comprar-whatsapp flex-1 inline-flex items-center justify-center rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
-        >
-          Pedir en WApp
-        </a>
-        <button
-          type="button"
-          class="btn-agregar-carrito flex-1 inline-flex items-center justify-center rounded-md border border-neutral-900 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
-          data-slug={slug}
-          data-titulo={titulo}
-          data-numero={numeroWhatsApp}
-        >
-          Agregar al carrito
-        </button>
-      </div>
-
-      <p class="aviso-carrito-obligatorio mt-2 hidden text-xs text-neutral-500 text-center">
-        ¿Quieres más de un producto? Agrégalos al carrito y te ayudamos a mandar todo en un solo mensaje.
-      </p>
-    </>
+    <div class="mt-2">
+      <button
+        type="button"
+        class="btn-agregar-carrito w-full inline-flex items-center justify-center rounded-md border border-neutral-900 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+        data-slug={slug}
+        data-titulo={titulo}
+        data-numero={numeroWhatsApp}
+      >
+        Agregar al carrito
+      </button>
+    </div>
   )}
 </div>
 
 <script>
   import {
-    estaBloqueado,
     estaEnCarrito,
     agregarAlCarrito,
     quitarDelCarrito,
   } from '../lib/carrito';
 
   function actualizarTarjeta(contenedor: HTMLElement) {
-    const btnComprar = contenedor.querySelector<HTMLAnchorElement>('.btn-comprar-whatsapp');
     const btnCarrito = contenedor.querySelector<HTMLButtonElement>('.btn-agregar-carrito');
-    const aviso = contenedor.querySelector<HTMLElement>('.aviso-carrito-obligatorio');
     const slug = btnCarrito?.dataset.slug;
-    if (!btnComprar || !btnCarrito || !slug) return;
-
-    const linkOriginal = btnComprar.dataset.href || btnComprar.getAttribute('href');
-    if (linkOriginal && !btnComprar.dataset.href) {
-      btnComprar.dataset.href = linkOriginal;
-    }
-
-    if (estaBloqueado()) {
-      btnComprar.removeAttribute('href');
-      btnComprar.setAttribute('aria-disabled', 'true');
-      btnComprar.classList.add('pointer-events-none', 'opacity-40', 'grayscale');
-      aviso?.classList.remove('hidden');
-    } else {
-      if (btnComprar.dataset.href) {
-        btnComprar.setAttribute('href', btnComprar.dataset.href);
-      }
-      btnComprar.removeAttribute('aria-disabled');
-      btnComprar.classList.remove('pointer-events-none', 'opacity-40', 'grayscale');
-      aviso?.classList.add('hidden');
-    }
+    if (!btnCarrito || !slug) return;
 
     const enCarrito = estaEnCarrito(slug);
     btnCarrito.textContent = enCarrito ? 'Quitar del carrito' : 'Agregar al carrito';

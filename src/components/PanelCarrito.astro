@@ -21,6 +21,10 @@ const { numeroDefault } = Astro.props;
       Todavía no tienes productos en el carrito.
     </p>
 
+    <p id="carrito-aviso" class="text-xs text-neutral-500 text-center mb-3">
+      Se abrirá WhatsApp con tu lista. El pago y la entrega se acuerdan ahí; este sitio no hace ningún cargo.
+    </p>
+
     <button
       id="btn-enviar-carrito"
       type="button"
@@ -28,6 +32,12 @@ const { numeroDefault } = Astro.props;
     >
       Enviar pedido por WhatsApp
     </button>
+
+    <div id="carrito-confirmacion" class="hidden text-center py-6">
+      <p class="text-2xl mb-2">✅</p>
+      <p class="text-sm font-medium text-neutral-900">¡Pedido enviado!</p>
+      <p class="text-sm text-neutral-500 mt-1">En breve te atendemos por WhatsApp.</p>
+    </div>
   </div>
 </div>
 
@@ -41,6 +51,7 @@ const { numeroDefault } = Astro.props;
     const vacio = document.getElementById('carrito-vacio');
     const btnEnviar = document.getElementById('btn-enviar-carrito') as HTMLButtonElement | null;
     const contador = document.getElementById('contador-carrito');
+    const aviso = document.getElementById('carrito-aviso');
 
     const items = obtenerCarrito();
 
@@ -52,11 +63,13 @@ const { numeroDefault } = Astro.props;
 
     if (items.length === 0) {
       vacio.classList.remove('hidden');
+      aviso?.classList.add('hidden');
       btnEnviar.disabled = true;
       return;
     }
 
     vacio.classList.add('hidden');
+    aviso?.classList.remove('hidden');
     btnEnviar.disabled = false;
 
     items.forEach((item) => {
@@ -96,8 +109,31 @@ const { numeroDefault } = Astro.props;
       const numeroDefault = panel?.dataset.numeroDefault || '';
       const envio = construirEnvioCarrito(numeroDefault);
       if (!envio) return;
+
+      // 1. Abrir WhatsApp
       const link = `https://wa.me/${envio.numero}?text=${encodeURIComponent(envio.mensaje)}`;
       window.open(link, '_blank', 'noopener,noreferrer');
+
+      // 2. Vaciar el carrito
+      localStorage.removeItem('hg_carrito');
+      document.dispatchEvent(new CustomEvent('carrito-actualizado'));
+
+      // 3. Mostrar confirmación en el panel
+      document.getElementById('lista-carrito')?.classList.add('hidden');
+      document.getElementById('carrito-vacio')?.classList.add('hidden');
+      document.getElementById('carrito-aviso')?.classList.add('hidden');
+      document.getElementById('btn-enviar-carrito')?.classList.add('hidden');
+      document.getElementById('carrito-confirmacion')?.classList.remove('hidden');
+
+      // 4. Cerrar panel después de 2.5 segundos y restaurar estado
+      setTimeout(() => {
+        document.getElementById('panel-carrito')?.classList.add('hidden');
+        document.getElementById('lista-carrito')?.classList.remove('hidden');
+        document.getElementById('btn-enviar-carrito')?.classList.remove('hidden');
+        document.getElementById('carrito-confirmacion')?.classList.add('hidden');
+        // Deja el panel coherente con el carrito (vacío) para la próxima vez que se abra
+        renderizarCarrito();
+      }, 2500);
     });
   });
 

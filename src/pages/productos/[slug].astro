@@ -1,6 +1,9 @@
 ---
 import { sanityClient, urlFor, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../lib/sanity';
 import Layout from '../../layouts/Layout.astro';
+import MenuHamburguesa from '../../components/MenuHamburguesa.astro';
+import BotonCarrito from '../../components/BotonCarrito.astro';
+import PanelCarrito from '../../components/PanelCarrito.astro';
 
 export async function getStaticPaths() {
   const productos = await sanityClient.fetch(`
@@ -57,9 +60,12 @@ const configWhatsApp = await obtenerConfiguracionWhatsApp();
 const numeroWhatsApp = numeroWhatsAppParaDepartamento(producto.categoriaDepartamento, configWhatsApp);
 const nombreDepartamentoTexto = nombreDepartamento(producto.categoriaDepartamento, configWhatsApp);
 
+// El menú hamburguesa lista todos los departamentos, así que hay que traerlos aquí también.
+const todosDepartamentos = await sanityClient.fetch(`
+  array::unique(*[_type == "categoria" && defined(departamento)].departamento)
+`);
+
 const linkProducto = `https://hgstoremx.com/productos/${slug}/`;
-const mensaje = `Hola, me interesa: ${producto.titulo}${producto.edicion ? ` (${producto.edicion})` : ''}\n\n${linkProducto}`;
-const linkWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
 
 const linkVolverRespaldo = `/catalogo/${producto.categoriaDepartamento}/`;
 
@@ -140,7 +146,12 @@ const datosBreadcrumb = {
     <script type="application/ld+json" set:html={JSON.stringify(datosBreadcrumb)} />
   </Fragment>
 
-  <main class="px-6 py-12 max-w-3xl mx-auto">
+  <MenuHamburguesa departamentos={todosDepartamentos} configWhatsApp={configWhatsApp}>
+    <BotonCarrito slot="carrito" />
+  </MenuHamburguesa>
+  <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
+
+  <main class="px-6 py-12 max-w-3xl mx-auto" data-tarjeta-producto>
     <a id="enlace-volver" href={linkVolverRespaldo} data-departamento={nombreDepartamentoTexto} class="text-sm text-neutral-500 hover:text-neutral-900">
       &larr; Volver a {nombreDepartamentoTexto}
     </a>
@@ -213,14 +224,23 @@ const datosBreadcrumb = {
             AGOTADO
           </div>
         ) : (
-          <a
-            href={linkWhatsApp}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="mt-8 inline-flex w-full items-center justify-center rounded-md bg-neutral-900 px-6 py-3 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
-          >
-            Comprar por WhatsApp
-          </a>
+          <>
+            <div class="mt-8">
+              <button
+                type="button"
+                class="btn-agregar-carrito w-full inline-flex items-center justify-center rounded-md border border-neutral-900 px-6 py-3 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+                data-slug={slug}
+                data-titulo={producto.titulo}
+                data-numero={numeroWhatsApp}
+              >
+                Agregar al carrito
+              </button>
+            </div>
+
+            <p class="mt-3 text-xs text-neutral-500 text-center">
+              Para pedirlo, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; este sitio no hace ningún cargo.
+            </p>
+          </>
         )}
       </div>
     </div>
@@ -255,6 +275,58 @@ const datosBreadcrumb = {
     </div>
   </div>
 </Layout>
+
+<script>
+  import {
+    estaEnCarrito,
+    agregarAlCarrito,
+    quitarDelCarrito,
+  } from '../../lib/carrito';
+
+  // Misma lógica que ProductCard.astro, replicada aquí porque el script de ese
+  // componente no se carga en esta página (no se usa ProductCard en la ficha).
+  function actualizarBotonesCarrito() {
+    const contenedor = document.querySelector<HTMLElement>('[data-tarjeta-producto]');
+    if (!contenedor) return;
+
+    const btnCarrito = contenedor.querySelector<HTMLButtonElement>('.btn-agregar-carrito');
+    const slugProducto = btnCarrito?.dataset.slug;
+    if (!btnCarrito || !slugProducto) return;
+
+    const enCarrito = estaEnCarrito(slugProducto);
+    btnCarrito.textContent = enCarrito ? 'Quitar del carrito' : 'Agregar al carrito';
+    btnCarrito.classList.toggle('bg-neutral-900', enCarrito);
+    btnCarrito.classList.toggle('text-white', enCarrito);
+  }
+
+  function iniciarCarrito() {
+    actualizarBotonesCarrito();
+
+    const btn = document.querySelector<HTMLButtonElement>('.btn-agregar-carrito');
+    btn?.addEventListener('click', () => {
+      const slugProducto = btn.dataset.slug!;
+      const tituloProducto = btn.dataset.titulo!;
+      const numeroProducto = btn.dataset.numero!;
+
+      if (estaEnCarrito(slugProducto)) {
+        quitarDelCarrito(slugProducto);
+      } else {
+        agregarAlCarrito({ slug: slugProducto, titulo: tituloProducto, numeroWhatsApp: numeroProducto });
+      }
+
+      actualizarBotonesCarrito();
+      document.dispatchEvent(new CustomEvent('carrito-actualizado'));
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciarCarrito);
+  } else {
+    iniciarCarrito();
+  }
+
+  document.addEventListener('carrito-actualizado', actualizarBotonesCarrito);
+</script>
 
 <script>
   const imagenPrincipal = document.getElementById('imagen-principal') as HTMLImageElement;
