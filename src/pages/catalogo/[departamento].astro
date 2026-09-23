@@ -1,5 +1,5 @@
 ---
-import { sanityClient, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../lib/sanity';
+import { sanityClient, urlFor, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../lib/sanity';
 import Layout from '../../layouts/Layout.astro';
 import MenuHamburguesa from '../../components/MenuHamburguesa.astro';
 import Footer from '../../components/Footer.astro';
@@ -100,24 +100,24 @@ function generarDescripcionDepartamento(
   const seleccionados = nombresUnicos.slice(0, LIMITE).map((n) => n.nombre);
 
   if (seleccionados.length === 0) {
-    return `Explora nuestro catálogo de ${nombreDepto} en HG Shop MX.`;
+    return `Explora nuestro catálogo de ${nombreDepto} en HG Store MX.`;
   }
 
   if (seleccionados.length === 1) {
-    return `Descubre nuestra selección de ${seleccionados[0]} en ${nombreDepto} — catálogo completo en HG Shop MX.`;
+    return `Descubre nuestra selección de ${seleccionados[0]} en ${nombreDepto} — catálogo completo en HG Store MX.`;
   }
 
   const hayMas = totalUnicos > LIMITE;
 
   if (seleccionados.length === 2 && !hayMas) {
-    return `Encuentra ${seleccionados[0]} y ${seleccionados[1]} en ${nombreDepto} — catálogo completo en HG Shop MX.`;
+    return `Encuentra ${seleccionados[0]} y ${seleccionados[1]} en ${nombreDepto} — catálogo completo en HG Store MX.`;
   }
 
   const todosMenosUltimo = seleccionados.slice(0, -1).join(', ');
   const ultimo = seleccionados[seleccionados.length - 1];
   const cierre = hayMas ? `${todosMenosUltimo}, ${ultimo} y más` : `${todosMenosUltimo} y ${ultimo}`;
 
-  return `Encuentra ${cierre} en ${nombreDepto} — catálogo completo en HG Shop MX.`;
+  return `Encuentra ${cierre} en ${nombreDepto} — catálogo completo en HG Store MX.`;
 }
 
 const categoriasConConteo = categorias.map((titulo) => ({
@@ -126,8 +126,14 @@ const categoriasConConteo = categorias.map((titulo) => ({
 }));
 
 const descripcionDepartamento = generarDescripcionDepartamento(nombreDepartamentoTexto, categoriasConConteo);
+
+// Imagen destacada para og:image: una foto real de un producto de este departamento.
+const productoDestacadoDepto = productos.find((p: any) => p.imagenPrincipal);
+const imagenDepartamento = productoDestacadoDepto
+  ? urlFor(productoDestacadoDepto.imagenPrincipal).width(1200).height(630).fit('crop').auto('format').url()
+  : undefined;
 ---
-<Layout titulo={`${nombreDepartamentoTexto} - HG Shop MX`} descripcion={descripcionDepartamento}>
+<Layout titulo={`${nombreDepartamentoTexto} - HG Store MX`} descripcion={descripcionDepartamento} imagen={imagenDepartamento}>
   <MenuHamburguesa departamentos={todosDepartamentos} configWhatsApp={configWhatsApp}>
     <BotonCarrito slot="carrito" />
   </MenuHamburguesa>

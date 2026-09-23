@@ -1,0 +1,67 @@
+---
+import { sanityClient, nombreDepartamento, obtenerConfiguracionWhatsApp } from '../lib/sanity';
+import Layout from '../layouts/Layout.astro';
+import MenuHamburguesa from '../components/MenuHamburguesa.astro';
+import Footer from '../components/Footer.astro';
+import BotonCarrito from '../components/BotonCarrito.astro';
+import PanelCarrito from '../components/PanelCarrito.astro';
+
+const categorias = await sanityClient.fetch(`
+  *[_type == "categoria" && defined(departamento)]{
+    departamento
+  }
+`);
+
+const configWhatsApp = await obtenerConfiguracionWhatsApp();
+
+const departamentos = Array.from(new Set(categorias.map((c: any) => c.departamento))) as string[];
+---
+<Layout titulo="Página no encontrada - HG Store MX" noIndex={true}>
+  <MenuHamburguesa departamentos={departamentos} configWhatsApp={configWhatsApp}>
+    <BotonCarrito slot="carrito" />
+  </MenuHamburguesa>
+  <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
+
+  <section class="px-6 pt-20 pb-16 text-center max-w-xl mx-auto">
+    <p class="text-sm font-medium text-neutral-400">Error 404</p>
+    <h1 class="mt-2 text-3xl md:text-4xl font-semibold tracking-tight text-neutral-900">
+      No encontramos esta página
+    </h1>
+    <p class="mt-4 text-neutral-500">
+      El producto o la página que buscas ya no está disponible, o la dirección tiene un error.
+    </p>
+
+    <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+      <a
+        href="/"
+        class="inline-flex items-center justify-center rounded-md bg-neutral-900 px-6 py-3 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
+      >
+        Ir al inicio
+      </a>
+      <a
+        href="/#buscador"
+        class="inline-flex items-center justify-center rounded-md border border-neutral-900 px-6 py-3 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+      >
+        Buscar un producto
+      </a>
+    </div>
+
+    {departamentos.length > 0 && (
+      <div class="mt-10">
+        <p class="text-sm font-medium text-neutral-900">O elige un departamento</p>
+        <div class="mt-3 flex flex-wrap gap-2 justify-center">
+          {departamentos.map((depto) => (
+            <a
+              href={`/catalogo/${depto}/`}
+              class="rounded-full border border-neutral-200 px-3 py-1 text-xs text-neutral-600 hover:border-neutral-400 hover:text-neutral-900 transition-colors"
+            >
+              {nombreDepartamento(depto, configWhatsApp)}
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+  </section>
+
+  <Footer departamentos={departamentos} configWhatsApp={configWhatsApp} />
+</Layout>

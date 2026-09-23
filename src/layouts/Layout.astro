@@ -10,8 +10,8 @@ interface Props {
 }
 
 const {
-  titulo = "HG Shop MX",
-  descripcion = "Catálogo de productos - HG Shop MX",
+  titulo = "HG Store MX",
+  descripcion = "Catálogo de productos - HG Store MX",
   imagen,
   noIndex = false,
   canonical,
@@ -29,9 +29,8 @@ const urlCanonica = canonical || new URL(Astro.url.pathname, Astro.site).toStrin
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#171717" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="preload" href="/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <title>{titulo}</title>
     <meta name="description" content={descripcion} />
     <link rel="canonical" href={urlCanonica} />
@@ -50,6 +49,37 @@ const urlCanonica = canonical || new URL(Astro.url.pathname, Astro.site).toStrin
     {imagen && <meta name="twitter:image" content={imagen} />}
 
     <slot name="head" />
+
+    <style is:global>
+      @font-face {
+        font-family: 'Inter';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('/fonts/inter-latin-400-normal.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('/fonts/inter-latin-500-normal.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url('/fonts/inter-latin-600-normal.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Inter';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('/fonts/inter-latin-700-normal.woff2') format('woff2');
+      }
+    </style>
   </head>
   <body class="bg-white text-neutral-900 font-sans antialiased">
     <slot />
