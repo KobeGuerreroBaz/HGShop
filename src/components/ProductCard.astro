@@ -4,7 +4,7 @@ import { urlFor } from '../lib/sanity';
 interface Props {
   slug: string;
   titulo: string;
-  precio: number;
+  precio?: number | null;
   imagenPrincipal: any;
   descripcion?: string;
   altTexto?: string;
@@ -33,7 +33,11 @@ const textoAlt = altTexto || titulo;
       <p class="mt-1 text-xs text-neutral-500 line-clamp-2">{descripcion}</p>
     )}
   </a>
-  <p class="mt-1 text-base font-semibold text-neutral-900">${precio} MXN</p>
+  {precio != null ? (
+    <p class="mt-1 text-base font-semibold text-neutral-900">${precio} MXN</p>
+  ) : (
+    <p class="mt-1 text-base font-semibold text-neutral-500">Consultar precio</p>
+  )}
 
   {agotado ? (
     <div class="mt-2 flex items-center justify-center rounded-md bg-neutral-100 border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-500 tracking-wide">

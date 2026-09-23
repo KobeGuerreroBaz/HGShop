@@ -2,6 +2,7 @@
 import { sanityClient, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../lib/sanity';
 import Layout from '../../layouts/Layout.astro';
 import MenuHamburguesa from '../../components/MenuHamburguesa.astro';
+import Footer from '../../components/Footer.astro';
 import BotonCarrito from '../../components/BotonCarrito.astro';
 import PanelCarrito from '../../components/PanelCarrito.astro';
 import ProductCard from '../../components/ProductCard.astro';
@@ -154,8 +155,8 @@ const descripcionDepartamento = generarDescripcionDepartamento(nombreDepartament
     </div>
   </div>
 
-  <p class="px-6 pt-4 max-w-2xl mx-auto text-center text-xs text-neutral-500">
-    Para pedirlo, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; este sitio no hace ningún cargo.
+  <p class="px-6 pt-5 max-w-2xl mx-auto text-center text-base leading-relaxed text-neutral-600">
+    Para pedir cualquier producto, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; en ningún momento se te solicitará ningún pago en este sitio.
   </p>
 
   <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto space-y-10">
@@ -204,6 +205,8 @@ const descripcionDepartamento = generarDescripcionDepartamento(nombreDepartament
       <p class="text-center text-neutral-400">Todavía no hay productos en este departamento.</p>
     )}
   </main>
+
+  <Footer departamentos={todosDepartamentos} configWhatsApp={configWhatsApp} />
 </Layout>
 
 <script>
