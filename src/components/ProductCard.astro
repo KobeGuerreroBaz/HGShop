@@ -43,7 +43,7 @@ const textoAlt = altTexto || titulo;
     <div class="mt-2">
       <button
         type="button"
-        class="btn-agregar-carrito w-full inline-flex items-center justify-center rounded-md border border-neutral-900 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+        class="btn-agregar-carrito w-full inline-flex items-center justify-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 transition-colors"
         data-slug={slug}
         data-titulo={titulo}
         data-numero={numeroWhatsApp}
@@ -61,6 +61,11 @@ const textoAlt = altTexto || titulo;
     quitarDelCarrito,
   } from '../lib/carrito';
 
+  // Dos aspectos completos del botón. Se cambian juntos (fondo, texto y hover) para que
+  // el texto nunca quede del mismo color que el fondo, ni siquiera al pasar el cursor.
+  const CLASES_AGREGAR = ['bg-neutral-900', 'text-white', 'hover:bg-neutral-700'];
+  const CLASES_EN_CARRITO = ['bg-white', 'text-neutral-900', 'hover:bg-neutral-100'];
+
   function actualizarTarjeta(contenedor: HTMLElement) {
     const btnCarrito = contenedor.querySelector<HTMLButtonElement>('.btn-agregar-carrito');
     const slug = btnCarrito?.dataset.slug;
@@ -68,8 +73,8 @@ const textoAlt = altTexto || titulo;
 
     const enCarrito = estaEnCarrito(slug);
     btnCarrito.textContent = enCarrito ? 'Quitar del carrito' : 'Agregar al carrito';
-    btnCarrito.classList.toggle('bg-neutral-900', enCarrito);
-    btnCarrito.classList.toggle('text-white', enCarrito);
+    btnCarrito.classList.remove(...(enCarrito ? CLASES_AGREGAR : CLASES_EN_CARRITO));
+    btnCarrito.classList.add(...(enCarrito ? CLASES_EN_CARRITO : CLASES_AGREGAR));
   }
 
   function actualizarTodasLasTarjetas() {
