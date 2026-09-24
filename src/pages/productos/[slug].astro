@@ -152,12 +152,18 @@ const datosBreadcrumb = {
   </MenuHamburguesa>
   <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
 
-  <main class="px-6 py-12 max-w-3xl mx-auto" data-tarjeta-producto>
-    <a id="enlace-volver" href={linkVolverRespaldo} data-departamento={nombreDepartamentoTexto} class="text-sm text-neutral-500 hover:text-neutral-900">
-      &larr; Volver a {nombreDepartamentoTexto}
+  <nav aria-label="Ruta de navegación" class="flex items-center gap-1.5 px-6 py-2 max-w-3xl mx-auto text-sm border-b border-neutral-100 overflow-hidden">
+    <a href="/" class="shrink-0 text-neutral-500 hover:text-neutral-900">Inicio</a>
+    <span class="shrink-0 text-neutral-300" aria-hidden="true">&rsaquo;</span>
+    <a id="enlace-volver" href={linkVolverRespaldo} data-departamento={nombreDepartamentoTexto} class="shrink-0 text-neutral-500 hover:text-neutral-900">
+      {nombreDepartamentoTexto}
     </a>
+    <span class="shrink-0 text-neutral-300" aria-hidden="true">&rsaquo;</span>
+    <span class="font-medium text-neutral-900 truncate">{producto.titulo}</span>
+  </nav>
 
-    <div class="mt-6 grid md:grid-cols-2 gap-10">
+  <main class="px-6 pt-6 pb-12 max-w-3xl mx-auto" data-tarjeta-producto>
+    <div class="grid md:grid-cols-2 gap-10">
       <div id="galeria-producto" data-fotos={JSON.stringify(todasLasFotos.map((f) => f.completa))}>
         <div class="aspect-square w-full overflow-hidden rounded-xl bg-neutral-50 border border-neutral-100">
           <img

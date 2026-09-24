@@ -6,7 +6,6 @@ import Footer from '../../components/Footer.astro';
 import BotonCarrito from '../../components/BotonCarrito.astro';
 import PanelCarrito from '../../components/PanelCarrito.astro';
 import ProductCard from '../../components/ProductCard.astro';
-import IndicadorFlotante from '../../components/IndicadorFlotante.astro';
 
 export async function getStaticPaths() {
   const departamentos = await sanityClient.fetch(`
@@ -137,17 +136,18 @@ const imagenDepartamento = productoDestacadoDepto
   <MenuHamburguesa departamentos={todosDepartamentos} configWhatsApp={configWhatsApp}>
     <BotonCarrito slot="carrito" />
   </MenuHamburguesa>
-  <IndicadorFlotante />
   <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
 
-  <section class="px-6 pt-12 pb-4 text-center max-w-2xl mx-auto">
-    <a href="/" class="text-sm text-neutral-500 hover:text-neutral-900">&larr; Volver al inicio</a>
-    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">
+  <nav aria-label="Ruta de navegación" class="flex items-center gap-1.5 px-6 py-2 text-sm border-b border-neutral-100">
+    <a href="/" class="text-neutral-500 hover:text-neutral-900">Inicio</a>
+    <span class="text-neutral-300" aria-hidden="true">&rsaquo;</span>
+    <span class="font-medium text-neutral-900">{nombreDepartamentoTexto}</span>
+  </nav>
+
+  <section class="px-6 pt-8 pb-2 text-center max-w-2xl mx-auto">
+    <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">
       {nombreDepartamentoTexto}
     </h1>
-    <p class="mt-2 text-sm text-neutral-500">
-      {descripcionDepartamento}
-    </p>
   </section>
 
   <div class="sticky z-10 bg-white border-b border-neutral-100 px-6 py-3" style="top: var(--alto-header, 68px);">
@@ -158,6 +158,23 @@ const imagenDepartamento = productoDestacadoDepto
         placeholder={`Buscar en ${nombreDepartamentoTexto}...`}
         class="w-full rounded-full border border-neutral-200 px-6 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
       />
+      {categoriasConConteo.length > 1 && (
+        <div id="fila-categorias" class="mt-2 flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none;">
+          {categoriasConConteo.map((cat, index) => (
+            <button
+              type="button"
+              class={`chip-categoria shrink-0 rounded-full border px-3 py-1.5 text-xs whitespace-nowrap transition-colors ${
+                index === 0
+                  ? 'bg-neutral-900 border-neutral-900 text-white'
+                  : 'border-neutral-200 text-neutral-600 hover:border-neutral-400'
+              }`}
+              data-categoria={cat.titulo}
+            >
+              {cat.titulo}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   </div>
 
@@ -286,4 +303,44 @@ const imagenDepartamento = productoDestacadoDepto
       boton.style.display = 'none';
     });
   });
+
+  const CLASES_CHIP_ACTIVO = ['bg-neutral-900', 'border-neutral-900', 'text-white'];
+  const CLASES_CHIP_INACTIVO = ['border-neutral-200', 'text-neutral-600', 'hover:border-neutral-400'];
+
+  const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('.chip-categoria'));
+  const secciones = Array.from(document.querySelectorAll<HTMLElement>('[data-seccion-nombre]'));
+
+  function activarChip(nombreCategoria: string) {
+    chips.forEach((chip) => {
+      const activo = chip.dataset.categoria === nombreCategoria;
+      chip.classList.remove(...(activo ? CLASES_CHIP_INACTIVO : CLASES_CHIP_ACTIVO));
+      chip.classList.add(...(activo ? CLASES_CHIP_ACTIVO : CLASES_CHIP_INACTIVO));
+      if (activo) {
+        chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    });
+  }
+
+  chips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const nombre = chip.dataset.categoria || '';
+      const seccion = secciones.find((s) => s.dataset.seccionNombre === nombre);
+      seccion?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  if (chips.length > 0 && secciones.length > 1) {
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        entradas.forEach((entrada) => {
+          if (entrada.isIntersecting) {
+            const nombre = (entrada.target as HTMLElement).dataset.seccionNombre || '';
+            activarChip(nombre);
+          }
+        });
+      },
+      { rootMargin: '-40% 0px -40% 0px', threshold: 0 }
+    );
+    secciones.forEach((seccion) => observador.observe(seccion));
+  }
 </script>
