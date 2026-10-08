@@ -22,7 +22,8 @@ export default defineConfig({
       filter: (page) =>
         !page.includes('/subir') &&
         !page.includes('/precios') &&
-        !page.includes('/pedido'),
+        !page.includes('/pedido') &&
+        !page.includes('/buscar'),
     }),
   ],
 });

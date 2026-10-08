@@ -1,0 +1,84 @@
+---
+export const prerender = false;
+
+import { sanityClient, urlFor } from '../lib/sanity';
+import Layout from '../layouts/Layout.astro';
+
+// Página pensada para COMPARTIR búsquedas (hgstoremx.com/buscar?q=bluey).
+//
+// Los rastreadores de Facebook/Messenger/WhatsApp no ejecutan JavaScript: solo leen el
+// HTML que entrega el servidor. Por eso esta página se genera en el servidor, escoge la
+// foto de un producto que coincida con la búsqueda y la declara como og:image. Las
+// personas que abren el link son enviadas por el script de abajo a /?q=..., donde ven
+// el catálogo normal con la búsqueda ya hecha. El inicio sigue siendo una página fija.
+
+const consultaCruda = (Astro.url.searchParams.get('q') || '').trim().slice(0, 80);
+const consulta = consultaCruda.toLowerCase();
+
+// Sin término de búsqueda no hay nada que compartir: mandar al inicio.
+if (consulta === '') {
+  return Astro.redirect('/');
+}
+
+// Esta página es solo para vistas previas de links compartidos: nunca debe indexarse.
+// El <meta robots noindex> ya lo pone el Layout; esta cabecera HTTP lo refuerza.
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+// Si Sanity falla, la página no debe romperse: se queda con título e imagen genéricos.
+let productos: any[] = [];
+try {
+  productos = await sanityClient.fetch(`
+    *[_type == "producto" && defined(categoria)]{
+      titulo,
+      palabrasClave,
+      imagenPrincipal,
+      agotado
+    }
+  `);
+} catch (error) {
+  console.error('buscar.astro: no se pudo consultar Sanity', error);
+}
+
+// Mismo criterio de coincidencia que el buscador del inicio (título + palabras clave).
+const coincidentes = productos.filter((p: any) =>
+  `${p.titulo} ${(p.palabrasClave || []).join(' ')}`.toLowerCase().includes(consulta)
+);
+const destacado =
+  coincidentes.find((p: any) => p.imagenPrincipal && !p.agotado) ||
+  coincidentes.find((p: any) => p.imagenPrincipal);
+
+const hayResultados = coincidentes.length > 0;
+const nombreBusqueda = consultaCruda.charAt(0).toUpperCase() + consultaCruda.slice(1);
+
+const titulo = hayResultados ? `${nombreBusqueda} - HG Store MX` : 'HG Store MX - Catálogo';
+const descripcion = hayResultados
+  ? `Mira ${coincidentes.length} producto${coincidentes.length !== 1 ? 's' : ''} de ${consultaCruda} en HG Store MX — catálogo completo en Monterrey.`
+  : 'Catálogo completo de HG Store MX en Monterrey.';
+
+const imagen = destacado
+  ? urlFor(destacado.imagenPrincipal).width(1200).height(630).fit('crop').auto('format').url()
+  : new URL('/icon-512.png', Astro.site).toString();
+
+// Facebook toma og:url como la dirección "oficial" del link y vuelve a leer las etiquetas
+// de ahí, así que debe ser esta misma URL con su ?q=. Va con noindex para que Google no
+// indexe esta página: el inicio y los catálogos son los que posicionan.
+const urlCanonica = new URL(`/buscar?q=${encodeURIComponent(consultaCruda)}`, Astro.site).toString();
+const urlResultados = `/?q=${encodeURIComponent(consultaCruda)}`;
+---
+<Layout titulo={titulo} descripcion={descripcion} imagen={imagen} canonical={urlCanonica} noIndex={true}>
+  <main class="px-6 py-24 max-w-md mx-auto text-center">
+    <p class="text-neutral-600">Abriendo los resultados de “{consultaCruda}”…</p>
+    <p class="mt-4">
+      <a href={urlResultados} class="font-semibold text-neutral-900 underline">Ver resultados</a>
+    </p>
+  </main>
+
+  <script is:inline>
+    // Quien abre el link compartido pasa directo al catálogo con la búsqueda hecha.
+    // replace() evita que el botón "atrás" regrese a esta página intermedia.
+    (function () {
+      var q = new URLSearchParams(window.location.search).get('q');
+      if (q) window.location.replace('/?q=' + encodeURIComponent(q));
+    })();
+  </script>
+</Layout>

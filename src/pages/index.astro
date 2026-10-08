@@ -215,13 +215,17 @@ const imagenInicio = productoDestacadoInicio
       resultadosBusqueda.classList.toggle('hidden', !hayBusqueda);
     }
 
-    // Reflejar la búsqueda en la URL (?q=...) sin recargar la página, para que
-    // el link se pueda copiar y compartir tal cual.
+    // Reflejar la búsqueda en la URL sin recargar la página, para que el link de la
+    // barra de direcciones se pueda copiar y compartir tal cual. Con búsqueda la ruta
+    // es /buscar?q=... (página que entrega la foto correcta a Messenger/WhatsApp y
+    // luego manda a quien la abre de vuelta aquí); sin búsqueda, la ruta es /.
     if (actualizarUrl) {
       const url = new URL(window.location.href);
       if (hayBusqueda) {
+        url.pathname = '/buscar';
         url.searchParams.set('q', query);
       } else {
+        url.pathname = '/';
         url.searchParams.delete('q');
       }
       window.history.replaceState({}, '', url);
@@ -251,11 +255,13 @@ const imagenInicio = productoDestacadoInicio
   });
 
   // Si alguien abre un link con ?q=algo (por ejemplo el que tú compartiste),
-  // precargar esa búsqueda automáticamente al entrar a la página.
+  // precargar esa búsqueda automáticamente al entrar a la página. También se
+  // actualiza la URL (a /buscar?q=...) para que, si esa persona reenvía el link
+  // desde su barra de direcciones, la vista previa lleve la foto de la búsqueda.
   const queryInicial = new URLSearchParams(window.location.search).get('q');
   if (queryInicial && input) {
     input.value = queryInicial;
-    aplicarBusqueda(queryInicial.toLowerCase(), false);
+    aplicarBusqueda(queryInicial.toLowerCase(), true);
   }
 </script>
 
