@@ -30,7 +30,9 @@ export const GET: APIRoute = async ({ request, url }) => {
         palabrasClave,
         mostrarExistencias,
         agotado,
-        "categoriaTitulo": categoria->titulo
+        "categoriaTitulo": categoria->titulo,
+        "categoriaId": categoria._ref,
+        "departamento": categoria->departamento
       } | order(_createdAt asc)`,
       departamento ? { departamento } : {}
     );
@@ -44,7 +46,9 @@ export const GET: APIRoute = async ({ request, url }) => {
       mostrarExistencias: p.mostrarExistencias,
       agotado: p.agotado,
       categoriaTitulo: p.categoriaTitulo,
-      // 300px alcanza para la tarjeta de ~130px del grid de 3 columnas en /precios;
+      categoriaId: p.categoriaId,
+      departamento: p.departamento,
+      // 300px alcanza para la tarjeta de ~130px del grid de 3 columnas en /inventario;
       // .auto('format') deja que Sanity sirva WebP/AVIF en vez del original.
       imagenUrl: p.imagenPrincipal ? urlFor(p.imagenPrincipal).width(300).auto('format').url() : null,
     }));

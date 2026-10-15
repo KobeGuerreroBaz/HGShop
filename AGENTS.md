@@ -75,7 +75,7 @@ Run with Node from the repo root; they read `SANITY_PROJECT_ID`, `SANITY_API_TOK
 **"No price yet" is a real, load-bearing state, not an edge case.** Products are often created through the AI
 photo pipeline before anyone has priced them. `!defined(precio)` is the filter used everywhere that means
 "needs attention" (`api/departamentos.ts`, `api/productos-sin-precio.ts`), and pricing is meant to happen
-through `/precios` before a product is expected to be seen publicly.
+through `/inventario` before a product is expected to be seen publicly.
 
 ### Storefront pages (`src/pages/`)
 
@@ -89,14 +89,14 @@ through `/precios` before a product is expected to be seen publicly.
   by the cart) and re-fetches those products from Sanity to render a summary + total. Because this re-fetch
   happens server-side on the Cloudflare Worker on every request (not baked into static HTML, and not a
   browser-side fetch either), the `titulo`, `precio`, `imagenPrincipal` and `edicion` it queries always reflect
-  whatever is currently in Sanity — e.g. a price edited through `/precios` shows up here immediately, no
+  whatever is currently in Sanity — e.g. a price edited through `/inventario` shows up here immediately, no
   rebuild/redeploy needed. This is the one customer-facing exception to the "prerendered, needs a redeploy"
   rule below.
-- `subir.astro`, `precios.astro` — internal admin tools, see below
+- `subir.astro`, `inventario.astro` — internal admin tools, see below
 
 Public pages are prerendered against Sanity content at build time — there's no ISR/on-demand revalidation, so
 content changes need a rebuild/redeploy to go live **before customers see them on `index.astro`,
-`catalogo/[departamento].astro`, or `productos/[slug].astro`** — a price edited through `/precios` will not
+`catalogo/[departamento].astro`, or `productos/[slug].astro`** — a price edited through `/inventario` will not
 appear on the product page or category grid until the next deploy. `pedido.astro` (above) is the sole exception
 among public-facing pages. The admin pages and all of `src/pages/api/*` are also SSR (`prerender = false`) and
 therefore always current, but they aren't what a customer browsing the catalog sees.
@@ -110,7 +110,7 @@ single combined WhatsApp message instead of mixing flows. `construirEnvioCarrito
 gets the combined order by majority vote across the cart items' assigned numbers (ties favor `numeroDefault`),
 and the WhatsApp message links to `/pedido?productos=...` rather than listing products inline in the message.
 
-### Admin tools (`subir.astro`, `precios.astro`, `src/pages/api/*`)
+### Admin tools (`subir.astro`, `inventario.astro`, `src/pages/api/*`)
 
 Not a real auth system — every API route is gated by a single shared PIN (`UPLOAD_PIN`, a Cloudflare secret set
 via `wrangler secret put`, not present in `wrangler.jsonc` vars or `.env`) checked against the `x-upload-pin`
@@ -124,7 +124,7 @@ is correct, for the client-side PIN screen.
   `POST /api/crear-producto` (uploads images as Sanity assets, builds a unique slug as
   `<titulo-slug>-<últimos 8 chars del asset id>`, stores `hashFoto`). `POST /api/verificar-hash` is called
   client-side to warn when a photo looks like a re-upload of an existing product.
-- `precios.astro` — two modes: walk unpriced products department-by-department (`GET /api/departamentos` +
+- `inventario.astro` — two modes: walk unpriced products department-by-department (`GET /api/departamentos` +
   `GET /api/productos-sin-precio`), or search-and-edit any product (`GET /api/buscar-productos`); both save
   through `POST /api/actualizar-precio` (precio, cantidad, marca, palabrasClave, mostrarExistencias, agotado).
 
@@ -232,6 +232,15 @@ Se instaló `@astrojs/sitemap` y se agregó `robots.txt`. `noIndex` aplicado a `
 Canonical tags y Schema.org `Organization` agregados en el home. Campo `altTexto` generado por Gemini,
 propagado end-to-end: `analizar.ts` → `subir.astro` → `crear-producto.ts` → scripts de Mac. Descripciones SEO
 por departamento redactadas en formato de lista (reemplazando el scroll lateral que había antes).
+
+### 13 oct — Subdepartamentos en `/subir` y panel `/inventario`
+- `/subir`: el selector único de categorías se separó en **Departamento → Subdepartamento** (la categoría de Sanity
+  es el subdepartamento; no cambió el schema).
+- `/precios` pasó a llamarse **`/inventario`** (`inventario.astro`; `/precios` redirige vía `redirects` en
+  `astro.config.mjs`). Un solo panel: "Productos sin precio (N)" y "Buscar y editar producto", con la misma tarjeta
+  para precio/agotado, **mover de departamento** (`POST /api/mover-producto`) y **eliminar** (`POST /api/eliminar-producto`).
+- Eliminar borra el documento (y su borrador) pero **no sus fotos en Sanity**. Mover o borrar se ve en el sitio
+  público hasta el siguiente deploy (las fichas y departamentos son estáticos).
 
 ## Documentation
 

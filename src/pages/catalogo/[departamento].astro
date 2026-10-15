@@ -51,6 +51,7 @@ const porCategoria = productos.reduce((acc: any, producto: any) => {
 
 const categorias = Object.keys(porCategoria);
 const LIMITE_INICIAL = 4;
+const TANDA_VER_MAS = 24;
 const nombreDepartamentoTexto = nombreDepartamento(departamento, configWhatsApp);
 
 function quitarAcentos(texto: string): string {
@@ -126,13 +127,27 @@ const categoriasConConteo = categorias.map((titulo) => ({
 
 const descripcionDepartamento = generarDescripcionDepartamento(nombreDepartamentoTexto, categoriasConConteo);
 
-// Imagen destacada para og:image: una foto real de un producto de este departamento.
 const productoDestacadoDepto = productos.find((p: any) => p.imagenPrincipal);
 const imagenDepartamento = productoDestacadoDepto
   ? urlFor(productoDestacadoDepto.imagenPrincipal).width(1200).height(630).fit('crop').auto('format').url()
   : undefined;
+
+const productosEnOrden = categorias.flatMap((cat) => porCategoria[cat]);
+const datosItemList = {
+  '@context': 'https://schema.org/',
+  '@type': 'ItemList',
+  itemListElement: productosEnOrden.map((p: any, indice: number) => ({
+    '@type': 'ListItem',
+    position: indice + 1,
+    url: `https://hgstoremx.com/productos/${p.slug}/`,
+  })),
+};
 ---
 <Layout titulo={`${nombreDepartamentoTexto} - HG Store MX`} descripcion={descripcionDepartamento} imagen={imagenDepartamento}>
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(datosItemList)} />
+  </Fragment>
+
   <MenuHamburguesa departamentos={todosDepartamentos} configWhatsApp={configWhatsApp}>
     <BotonCarrito slot="carrito" />
   </MenuHamburguesa>
@@ -182,17 +197,25 @@ const imagenDepartamento = productoDestacadoDepto
     Para pedir cualquier producto, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; en ningún momento se te solicitará ningún pago en este sitio.
   </p>
 
-  <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto space-y-10">
+  <main class="px-6 pt-8 pb-20 max-w-5xl mx-auto space-y-10" data-tanda={TANDA_VER_MAS}>
     {categorias.map((cat) => {
       const productosDeCategoria = porCategoria[cat];
       const hayExtras = productosDeCategoria.length > LIMITE_INICIAL;
       return (
-        <div class="categoria-contenedor" data-categoria={cat} data-seccion-nombre={cat} data-expandido="false">
+        <div
+          class="categoria-contenedor"
+          data-categoria={cat}
+          data-seccion-nombre={cat}
+          data-total={productosDeCategoria.length}
+          data-visibles={LIMITE_INICIAL}
+          style="scroll-margin-top: 190px;"
+        >
           <h3 class="text-lg font-semibold text-neutral-900 mb-4 pb-2 border-b-2 border-neutral-900 inline-block pr-6">{cat}</h3>
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
             {productosDeCategoria.map((producto: any, index: number) => (
               <div
                 class={`producto-item ${index >= LIMITE_INICIAL ? 'producto-extra' : ''}`}
+                data-indice={index}
                 style={index >= LIMITE_INICIAL ? 'display: none;' : ''}
                 data-buscable={`${producto.titulo} ${(producto.palabrasClave || []).join(' ')}`.toLowerCase()}
               >
@@ -211,14 +234,17 @@ const imagenDepartamento = productoDestacadoDepto
             ))}
           </div>
           {hayExtras && (
-            <button
-              type="button"
-              class="boton-ver-mas mt-6 w-full sm:w-auto rounded-full bg-neutral-100 px-8 py-3.5 text-base font-semibold text-neutral-900 hover:bg-neutral-200 active:bg-neutral-300 transition"
-              data-texto-ver-mas={`Ver más (${productosDeCategoria.length - LIMITE_INICIAL} más)`}
-              data-texto-ver-menos="Ver menos"
-            >
-              Ver más ({productosDeCategoria.length - LIMITE_INICIAL} más)
-            </button>
+            <div class="mt-6 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                class="boton-ver-mas w-full sm:w-auto rounded-full bg-neutral-100 px-8 py-3.5 text-base font-semibold text-neutral-900 hover:bg-neutral-200 active:bg-neutral-300 transition"
+              >
+                Ver {Math.min(TANDA_VER_MAS, productosDeCategoria.length - LIMITE_INICIAL)} más
+              </button>
+              <p class="texto-contador text-sm text-neutral-400">
+                Mostrando {LIMITE_INICIAL} de {productosDeCategoria.length}
+              </p>
+            </div>
           )}
         </div>
       );
@@ -232,29 +258,58 @@ const imagenDepartamento = productoDestacadoDepto
   <Footer departamentos={todosDepartamentos} configWhatsApp={configWhatsApp} />
 </Layout>
 
+<style>
+  @keyframes pista-scroll-categorias {
+    0% { transform: translateX(0); }
+    35% { transform: translateX(-18px); }
+    65% { transform: translateX(3px); }
+    100% { transform: translateX(0); }
+  }
+  #fila-categorias.mostrar-pista {
+    animation: pista-scroll-categorias 0.9s ease-in-out 400ms 1;
+  }
+</style>
+
 <script>
   const input = document.getElementById('buscador') as HTMLInputElement;
+  const TANDA_VER_MAS = Number(document.querySelector('main')?.dataset.tanda) || 24;
+
+  function actualizarBotonYContador(contenedor: HTMLElement) {
+    const total = Number(contenedor.dataset.total || '0');
+    const visibles = Number(contenedor.dataset.visibles || '0');
+    const boton = contenedor.querySelector<HTMLButtonElement>('.boton-ver-mas');
+    const contador = contenedor.querySelector<HTMLElement>('.texto-contador');
+
+    if (contador) {
+      contador.style.display = '';
+      contador.textContent = `Mostrando ${visibles} de ${total}`;
+    }
+
+    if (!boton) return;
+    if (visibles >= total) {
+      boton.style.display = 'none';
+    } else {
+      boton.style.display = '';
+      boton.textContent = `Ver ${Math.min(TANDA_VER_MAS, total - visibles)} más`;
+    }
+  }
 
   document.querySelectorAll<HTMLButtonElement>('.boton-ver-mas').forEach((boton) => {
     boton.addEventListener('click', () => {
       const contenedor = boton.closest('.categoria-contenedor') as HTMLElement;
       if (!contenedor) return;
 
-      const estaExpandido = contenedor.dataset.expandido === 'true';
-      const nuevoEstado = !estaExpandido;
-      contenedor.dataset.expandido = nuevoEstado ? 'true' : 'false';
+      const total = Number(contenedor.dataset.total || '0');
+      const visiblesAntes = Number(contenedor.dataset.visibles || '0');
+      const nuevosVisibles = Math.min(visiblesAntes + TANDA_VER_MAS, total);
 
-      contenedor.querySelectorAll<HTMLElement>('.producto-extra').forEach((item) => {
-        item.style.display = nuevoEstado ? '' : 'none';
+      contenedor.querySelectorAll<HTMLElement>('.producto-item').forEach((item) => {
+        const indice = Number(item.dataset.indice || '0');
+        if (indice < nuevosVisibles) item.style.display = '';
       });
 
-      boton.textContent = nuevoEstado
-        ? boton.dataset.textoVerMenos || 'Ver menos'
-        : boton.dataset.textoVerMas || 'Ver más';
-
-      if (!nuevoEstado) {
-        contenedor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
+      contenedor.dataset.visibles = String(nuevosVisibles);
+      actualizarBotonYContador(contenedor);
     });
   });
 
@@ -263,23 +318,14 @@ const imagenDepartamento = productoDestacadoDepto
     const hayBusqueda = query !== '';
 
     if (!hayBusqueda) {
-      document.querySelectorAll<HTMLElement>('.producto-item').forEach((item) => {
-        if (!item.classList.contains('producto-extra')) item.style.display = '';
-      });
       document.querySelectorAll<HTMLElement>('.categoria-contenedor').forEach((cat) => {
-        const expandido = cat.dataset.expandido === 'true';
-        cat.querySelectorAll<HTMLElement>('.producto-extra').forEach((item) => {
-          item.style.display = expandido ? '' : 'none';
-        });
         cat.style.display = '';
-      });
-      document.querySelectorAll<HTMLButtonElement>('.boton-ver-mas').forEach((boton) => {
-        const contenedor = boton.closest('.categoria-contenedor') as HTMLElement;
-        const expandido = contenedor?.dataset.expandido === 'true';
-        boton.style.display = '';
-        boton.textContent = expandido
-          ? boton.dataset.textoVerMenos || 'Ver menos'
-          : boton.dataset.textoVerMas || 'Ver más';
+        const visibles = Number(cat.dataset.visibles || '0');
+        cat.querySelectorAll<HTMLElement>('.producto-item').forEach((item) => {
+          const indice = Number(item.dataset.indice || '0');
+          item.style.display = indice < visibles ? '' : 'none';
+        });
+        actualizarBotonYContador(cat);
       });
       return;
     }
@@ -302,6 +348,9 @@ const imagenDepartamento = productoDestacadoDepto
     document.querySelectorAll<HTMLButtonElement>('.boton-ver-mas').forEach((boton) => {
       boton.style.display = 'none';
     });
+    document.querySelectorAll<HTMLElement>('.texto-contador').forEach((contador) => {
+      contador.style.display = 'none';
+    });
   });
 
   const CLASES_CHIP_ACTIVO = ['bg-neutral-900', 'border-neutral-900', 'text-white'];
@@ -321,17 +370,35 @@ const imagenDepartamento = productoDestacadoDepto
     });
   }
 
+  let bloqueadoPorClic = false;
+  let temporizadorDesbloqueo: ReturnType<typeof setTimeout> | undefined;
+
   chips.forEach((chip) => {
     chip.addEventListener('click', () => {
       const nombre = chip.dataset.categoria || '';
       const seccion = secciones.find((s) => s.dataset.seccionNombre === nombre);
-      seccion?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!seccion) return;
+
+      bloqueadoPorClic = true;
+      activarChip(nombre);
+      seccion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      clearTimeout(temporizadorDesbloqueo);
+      temporizadorDesbloqueo = setTimeout(() => {
+        bloqueadoPorClic = false;
+      }, 700);
     });
   });
+
+  const filaCategorias = document.getElementById('fila-categorias');
+  if (filaCategorias && filaCategorias.scrollWidth > filaCategorias.clientWidth) {
+    filaCategorias.classList.add('mostrar-pista');
+  }
 
   if (chips.length > 0 && secciones.length > 1) {
     const observador = new IntersectionObserver(
       (entradas) => {
+        if (bloqueadoPorClic) return;
         entradas.forEach((entrada) => {
           if (entrada.isIntersecting) {
             const nombre = (entrada.target as HTMLElement).dataset.seccionNombre || '';

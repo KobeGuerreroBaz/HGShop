@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout titulo="Precios - HG Store MX" noIndex={true}>
+<Layout titulo="Inventario - HG Store MX" noIndex={true}>
   <main class="px-4 py-6 max-w-md mx-auto">
     <div id="pantalla-pin">
       <h1 class="text-xl font-semibold text-neutral-900">Acceso</h1>
@@ -17,12 +17,12 @@ import Layout from '../layouts/Layout.astro';
       <h1 class="text-xl font-semibold text-neutral-900">¿Qué quieres hacer?</h1>
       <div class="mt-5 space-y-3">
         <button id="boton-modo-faltantes" type="button" class="w-full text-left border border-neutral-200 rounded-xl px-4 py-4">
-          <span class="block font-medium text-neutral-900">Poner precio</span>
+          <span class="block font-medium text-neutral-900">Productos sin precio <span id="conteo-sin-precio" class="font-normal text-neutral-500"></span></span>
           <span class="block text-xs text-neutral-500 mt-1">Recorre por departamento los productos que aún no tienen precio</span>
         </button>
         <button id="boton-modo-busqueda" type="button" class="w-full text-left border border-neutral-200 rounded-xl px-4 py-4">
-          <span class="block font-medium text-neutral-900">Actualizar precios</span>
-          <span class="block text-xs text-neutral-500 mt-1">Busca un producto específico y edita su precio u otros datos</span>
+          <span class="block font-medium text-neutral-900">Buscar y editar producto</span>
+          <span class="block text-xs text-neutral-500 mt-1">Busca por nombre para cambiar su precio, moverlo de departamento o eliminarlo</span>
         </button>
       </div>
     </div>
@@ -100,6 +100,26 @@ import Layout from '../layouts/Layout.astro';
             Guardar
           </button>
         </div>
+
+        <div class="mt-6 pt-4 border-t border-neutral-200 space-y-2">
+          <p class="text-xs font-medium text-neutral-700">Mover a otro departamento</p>
+          <select id="mover-departamento" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm">
+            <option value="">Departamento...</option>
+          </select>
+          <select id="mover-categoria" disabled class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm disabled:bg-neutral-100 disabled:text-neutral-400">
+            <option value="">Primero elige un departamento...</option>
+          </select>
+          <button id="boton-mover" type="button" class="w-full border border-neutral-300 text-neutral-700 rounded-md py-2 text-sm font-medium">
+            Mover producto
+          </button>
+          <p id="mensaje-mover" class="hidden text-xs"></p>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-neutral-200">
+          <button id="boton-eliminar" type="button" class="w-full border border-red-300 text-red-600 rounded-md py-2 text-sm font-medium">
+            Eliminar producto
+          </button>
+        </div>
       </div>
     </div>
 
@@ -163,6 +183,12 @@ import Layout from '../layouts/Layout.astro';
   const botonSaltar = document.getElementById('boton-saltar') as HTMLButtonElement;
   const botonGuardar = document.getElementById('boton-guardar') as HTMLButtonElement;
   const botonOtroDepartamento = document.getElementById('boton-otro-departamento') as HTMLButtonElement;
+  const conteoSinPrecio = document.getElementById('conteo-sin-precio') as HTMLElement;
+  const moverDepartamento = document.getElementById('mover-departamento') as unknown as HTMLSelectElement;
+  const moverCategoria = document.getElementById('mover-categoria') as unknown as HTMLSelectElement;
+  const botonMover = document.getElementById('boton-mover') as HTMLButtonElement;
+  const mensajeMover = document.getElementById('mensaje-mover') as HTMLElement;
+  const botonEliminar = document.getElementById('boton-eliminar') as HTMLButtonElement;
 
   function headersConPin() {
     return { 'x-upload-pin': pinGuardado };
@@ -189,6 +215,19 @@ import Layout from '../layouts/Layout.astro';
       pantallaFin,
     ].forEach((p) => p.classList.add('hidden'));
     pantalla.classList.remove('hidden');
+    if (pantalla === pantallaModo) cargarConteoSinPrecio();
+  }
+
+  async function cargarConteoSinPrecio() {
+    try {
+      const respuesta = await fetch('/api/departamentos', { headers: headersConPin() });
+      if (!respuesta.ok) return;
+      const departamentos: DepartamentoConConteo[] = await respuesta.json();
+      const total = departamentos.reduce((suma, d) => suma + d.totalSinPrecio, 0);
+      conteoSinPrecio.textContent = `(${total})`;
+    } catch {
+      // El contador es solo informativo; si falla, el botón funciona igual.
+    }
   }
 
   async function mostrarContenidoSiHayAcceso() {
@@ -212,6 +251,8 @@ import Layout from '../layouts/Layout.astro';
 
   let modoActual: 'faltantes' | 'busqueda' = 'faltantes';
   let productosPendientes: ProductoParaAdmin[] = [];
+  let departamentoLista = '';
+  let productoActual: ProductoParaAdmin | null = null;
 
   botonModoFaltantes.addEventListener('click', () => {
     modoActual = 'faltantes';
@@ -263,6 +304,7 @@ import Layout from '../layouts/Layout.astro';
   }
 
   async function iniciarFlujoDepartamento(departamento: string) {
+    departamentoLista = departamento;
     mostrarPantalla(pantallaListaProductos);
     listaProductosSinPrecio.innerHTML = '<p class="text-sm text-neutral-400">Cargando...</p>';
     contadorLista.textContent = '';
@@ -433,6 +475,10 @@ import Layout from '../layouts/Layout.astro';
 
     (tarjeta as any).dataset.productoId = producto._id;
 
+    productoActual = producto;
+    mensajeMover.classList.add('hidden');
+    prepararMover(producto);
+
     campoPrecio.focus();
   }
 
@@ -440,6 +486,144 @@ import Layout from '../layouts/Layout.astro';
     const oculto = detallesOpcionales.classList.contains('hidden');
     detallesOpcionales.classList.toggle('hidden');
     botonMostrarDetalles.textContent = oculto ? '- Ocultar detalles' : '+ Agregar más detalles';
+  });
+
+  // ---- Mover de departamento / eliminar ----
+  let categoriasMover: { _id: string; titulo: string; departamento: string }[] = [];
+
+  async function asegurarCategoriasMover() {
+    if (categoriasMover.length > 0) return;
+    const respuesta = await fetch('/api/categorias', { headers: headersConPin() });
+    if (respuesta.ok) categoriasMover = await respuesta.json();
+  }
+
+  function poblarCategoriasMover(departamento: string, seleccion = '') {
+    moverCategoria.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = departamento ? 'Selecciona un subdepartamento...' : 'Primero elige un departamento...';
+    moverCategoria.appendChild(placeholder);
+
+    categoriasMover
+      .filter((c) => c.departamento === departamento)
+      .sort((a, b) => a.titulo.localeCompare(b.titulo))
+      .forEach((c) => {
+        const opcion = document.createElement('option');
+        opcion.value = c._id;
+        opcion.textContent = c.titulo;
+        moverCategoria.appendChild(opcion);
+      });
+
+    moverCategoria.disabled = !departamento;
+    if (seleccion) moverCategoria.value = seleccion;
+  }
+
+  async function prepararMover(producto: ProductoParaAdmin) {
+    await asegurarCategoriasMover();
+    if (productoActual !== producto) return; // ya se abrió otro producto mientras cargaba
+
+    const departamentos = Array.from(new Set(categoriasMover.map((c) => c.departamento))).sort();
+    moverDepartamento.innerHTML = '<option value="">Departamento...</option>';
+    departamentos.forEach((depto) => {
+      const opcion = document.createElement('option');
+      opcion.value = depto;
+      opcion.textContent = depto;
+      moverDepartamento.appendChild(opcion);
+    });
+    moverDepartamento.value = producto.departamento || '';
+    poblarCategoriasMover(moverDepartamento.value, producto.categoriaId || '');
+  }
+
+  moverDepartamento.addEventListener('change', () => {
+    poblarCategoriasMover(moverDepartamento.value);
+    mensajeMover.classList.add('hidden');
+  });
+
+  function mostrarMensajeMover(texto: string, esError: boolean) {
+    mensajeMover.textContent = texto;
+    mensajeMover.classList.remove('hidden', 'text-red-600', 'text-green-600');
+    mensajeMover.classList.add(esError ? 'text-red-600' : 'text-green-600');
+  }
+
+  botonMover.addEventListener('click', async () => {
+    if (!productoActual) return;
+    const categoriaId = moverCategoria.value;
+
+    if (!categoriaId) {
+      mostrarMensajeMover('Elige departamento y subdepartamento.', true);
+      return;
+    }
+    if (categoriaId === productoActual.categoriaId) {
+      mostrarMensajeMover('El producto ya está en ese subdepartamento.', true);
+      return;
+    }
+
+    botonMover.disabled = true;
+    botonMover.textContent = 'Moviendo...';
+
+    const respuesta = await fetch('/api/mover-producto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headersConPin() },
+      body: JSON.stringify({ id: productoActual._id, categoriaId }),
+    });
+    const resultado: { ok?: boolean; error?: string; categoriaTitulo?: string; departamento?: string } = await respuesta.json();
+
+    botonMover.disabled = false;
+    botonMover.textContent = 'Mover producto';
+
+    if (!resultado.ok) {
+      mostrarMensajeMover(`Error al mover: ${resultado.error}`, true);
+      return;
+    }
+
+    const id = productoActual._id;
+    productoActual.categoriaId = categoriaId;
+    productoActual.departamento = resultado.departamento;
+    productoActual.categoriaTitulo = resultado.categoriaTitulo;
+    categoriaProducto.textContent = resultado.categoriaTitulo || '';
+
+    // En el recorrido por departamento, un producto que se fue a otro departamento ya no pertenece a esta lista.
+    if (modoActual === 'faltantes' && resultado.departamento !== departamentoLista) {
+      productosPendientes = productosPendientes.filter((p) => p._id !== id);
+      mostrarListaProductos();
+      return;
+    }
+
+    mostrarMensajeMover('Movido ✓', false);
+  });
+
+  botonEliminar.addEventListener('click', async () => {
+    if (!productoActual) return;
+    const { _id: id, titulo } = productoActual;
+
+    if (!confirm(`¿Eliminar "${titulo}"? No se puede deshacer.`)) return;
+
+    botonEliminar.disabled = true;
+    botonEliminar.textContent = 'Eliminando...';
+
+    const respuesta = await fetch('/api/eliminar-producto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headersConPin() },
+      body: JSON.stringify({ id }),
+    });
+    const resultado: { ok?: boolean; error?: string } = await respuesta.json();
+
+    botonEliminar.disabled = false;
+    botonEliminar.textContent = 'Eliminar producto';
+
+    if (!resultado.ok) {
+      alert(`Error al eliminar: ${resultado.error}`);
+      return;
+    }
+
+    productoActual = null;
+    if (modoActual === 'faltantes') {
+      productosPendientes = productosPendientes.filter((p) => p._id !== id);
+      mostrarListaProductos();
+    } else {
+      mostrarPantalla(pantallaBusqueda);
+      campoBusqueda.dispatchEvent(new Event('input')); // refresca los resultados sin el producto borrado
+    }
   });
 
   async function guardarProducto() {

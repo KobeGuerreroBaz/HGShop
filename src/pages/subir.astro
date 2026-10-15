@@ -74,9 +74,15 @@ import Layout from '../layouts/Layout.astro';
             <textarea id="campo-descripcion" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" rows="6"></textarea>
           </div>
           <div>
-            <label class="text-xs text-neutral-500">Categoría</label>
-            <select id="campo-categoria" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm">
-              <option value="">Selecciona una categoría...</option>
+            <label class="text-xs text-neutral-500">Departamento</label>
+            <select id="campo-departamento" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm">
+              <option value="">Selecciona un departamento...</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Subdepartamento</label>
+            <select id="campo-categoria" disabled class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm disabled:bg-neutral-100 disabled:text-neutral-400">
+              <option value="">Primero elige un departamento...</option>
             </select>
           </div>
 
@@ -218,6 +224,7 @@ import Layout from '../layouts/Layout.astro';
   const formulario = document.getElementById('formulario') as HTMLElement;
   const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement;
   const campoDescripcion = document.getElementById('campo-descripcion') as HTMLTextAreaElement;
+  const campoDepartamento = document.getElementById('campo-departamento') as unknown as HTMLSelectElement;
   const campoCategoria = document.getElementById('campo-categoria') as unknown as HTMLSelectElement;
   const nuevaCategoriaForm = document.getElementById('nueva-categoria-form') as HTMLElement;
   const campoNuevaCategoriaTitulo = document.getElementById('campo-nueva-categoria-titulo') as HTMLInputElement;
@@ -247,22 +254,36 @@ import Layout from '../layouts/Layout.astro';
   campoContexto.addEventListener('input', () => ajustarAlturaTextarea(campoContexto));
 
   function reconstruirSelectCategorias() {
-    campoCategoria.innerHTML = '<option value="">Selecciona una categoría...</option>';
-    const categoriasOrdenadas = [...categorias].sort((a, b) => {
-      const deptoComparacion = a.departamento.localeCompare(b.departamento);
-      if (deptoComparacion !== 0) return deptoComparacion;
-      return a.titulo.localeCompare(b.titulo);
-    });
-    for (const cat of categoriasOrdenadas) {
-      const opcion = document.createElement('option');
-      opcion.value = cat._id;
-      opcion.textContent = `${cat.departamento} — ${cat.titulo}`;
-      campoCategoria.appendChild(opcion);
+    const depto = campoDepartamento.value;
+    const hayDepto = !!depto && depto !== VALOR_NUEVO_DEPARTAMENTO;
+    const valorPrevio = campoCategoria.value;
+
+    campoCategoria.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = hayDepto ? 'Selecciona un subdepartamento...' : 'Primero elige un departamento...';
+    campoCategoria.appendChild(placeholder);
+
+    if (hayDepto) {
+      const delDepto = categorias
+        .filter((c) => c.departamento === depto)
+        .sort((x, y) => x.titulo.localeCompare(y.titulo));
+      for (const cat of delDepto) {
+        const opcion = document.createElement('option');
+        opcion.value = cat._id;
+        opcion.textContent = cat.titulo;
+        campoCategoria.appendChild(opcion);
+      }
+      const opcionNueva = document.createElement('option');
+      opcionNueva.value = VALOR_NUEVA_CATEGORIA;
+      opcionNueva.textContent = '+ Crear subdepartamento nuevo';
+      campoCategoria.appendChild(opcionNueva);
     }
-    const opcionNueva = document.createElement('option');
-    opcionNueva.value = VALOR_NUEVA_CATEGORIA;
-    opcionNueva.textContent = '+ Crear categoría nueva';
-    campoCategoria.appendChild(opcionNueva);
+
+    campoCategoria.disabled = !hayDepto;
+    if (valorPrevio && Array.from(campoCategoria.options).some((o) => o.value === valorPrevio)) {
+      campoCategoria.value = valorPrevio;
+    }
   }
 
   function reconstruirSelectDepartamentos() {
@@ -278,6 +299,22 @@ import Layout from '../layouts/Layout.astro';
     opcionNuevo.value = VALOR_NUEVO_DEPARTAMENTO;
     opcionNuevo.textContent = '+ Crear departamento nuevo';
     campoNuevaCategoriaDepartamento.appendChild(opcionNuevo);
+
+    const valorPrevio = campoDepartamento.value;
+    campoDepartamento.innerHTML = '<option value="">Selecciona un departamento...</option>';
+    for (const depto of departamentosUnicos) {
+      const opcion = document.createElement('option');
+      opcion.value = depto;
+      opcion.textContent = depto;
+      campoDepartamento.appendChild(opcion);
+    }
+    const opcionNuevoPrincipal = document.createElement('option');
+    opcionNuevoPrincipal.value = VALOR_NUEVO_DEPARTAMENTO;
+    opcionNuevoPrincipal.textContent = '+ Crear departamento nuevo';
+    campoDepartamento.appendChild(opcionNuevoPrincipal);
+    if (valorPrevio && Array.from(campoDepartamento.options).some((o) => o.value === valorPrevio)) {
+      campoDepartamento.value = valorPrevio;
+    }
   }
 
   async function cargarCategorias() {
@@ -287,10 +324,25 @@ import Layout from '../layouts/Layout.astro';
     reconstruirSelectDepartamentos();
   }
 
+  campoDepartamento.addEventListener('change', () => {
+    campoCategoria.value = '';
+    reconstruirSelectCategorias();
+    errorCategoria.classList.add('hidden');
+    if (campoDepartamento.value === VALOR_NUEVO_DEPARTAMENTO) {
+      nuevaCategoriaForm.classList.remove('hidden');
+      campoNuevaCategoriaDepartamento.value = VALOR_NUEVO_DEPARTAMENTO;
+      nuevoDepartamentoForm.classList.remove('hidden');
+    } else {
+      nuevaCategoriaForm.classList.add('hidden');
+    }
+  });
+
   campoCategoria.addEventListener('change', () => {
     if (campoCategoria.value === VALOR_NUEVA_CATEGORIA) {
       nuevaCategoriaForm.classList.remove('hidden');
       errorCategoria.classList.add('hidden');
+      campoNuevaCategoriaDepartamento.value = campoDepartamento.value;
+      nuevoDepartamentoForm.classList.add('hidden');
     } else {
       nuevaCategoriaForm.classList.add('hidden');
     }
@@ -315,7 +367,9 @@ import Layout from '../layouts/Layout.astro';
     nuevoDepartamentoForm.classList.add('hidden');
     errorCategoria.classList.add('hidden');
     nuevaCategoriaForm.classList.add('hidden');
+    if (campoDepartamento.value === VALOR_NUEVO_DEPARTAMENTO) campoDepartamento.value = '';
     campoCategoria.value = '';
+    reconstruirSelectCategorias();
   });
 
   botonCrearCategoria.addEventListener('click', async () => {
@@ -354,8 +408,9 @@ import Layout from '../layouts/Layout.astro';
     }
 
     categorias.push({ _id: resultado._id!, titulo: resultado.titulo!, departamento: resultado.departamento! });
-    reconstruirSelectCategorias();
     reconstruirSelectDepartamentos();
+    campoDepartamento.value = resultado.departamento!;
+    reconstruirSelectCategorias();
     campoCategoria.value = resultado._id!;
 
     campoNuevaCategoriaTitulo.value = '';

@@ -11,6 +11,11 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   site: 'https://hgstoremx.com',
 
+  // El panel se llamaba /precios; se deja el redirect para favoritos o accesos directos viejos.
+  redirects: {
+    '/precios': '/inventario',
+  },
+
   vite: {
     plugins: [tailwindcss()]
   },
@@ -22,6 +27,7 @@ export default defineConfig({
       filter: (page) =>
         !page.includes('/subir') &&
         !page.includes('/precios') &&
+        !page.includes('/inventario') &&
         !page.includes('/pedido') &&
         !page.includes('/buscar'),
     }),

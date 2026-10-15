@@ -1,7 +1,7 @@
-// Formas de datos compartidas entre las rutas /api/ y el panel /precios.
+// Formas de datos compartidas entre las rutas /api/ y el panel /inventario.
 // Existen para que un cambio en lo que devuelve un endpoint (ej. renombrar
 // un campo) truene en build en vez de mostrar "undefined" en pantalla —
-// que es justo el bug que causó el mismatch entre departamentos.ts y precios.astro.
+// que es justo el bug que causó el mismatch entre departamentos.ts y inventario.astro.
 
 export interface DepartamentoConConteo {
   departamento: string;
@@ -9,7 +9,7 @@ export interface DepartamentoConConteo {
   totalSinPrecio: number;
 }
 
-/** Forma que devuelven productos-sin-precio.ts y buscar-productos.ts, y que consume precios.astro. */
+/** Forma que devuelven productos-sin-precio.ts y buscar-productos.ts, y que consume inventario.astro. */
 export interface ProductoParaAdmin {
   _id: string;
   titulo: string;
@@ -20,5 +20,8 @@ export interface ProductoParaAdmin {
   mostrarExistencias?: boolean;
   agotado?: boolean;
   categoriaTitulo?: string;
+  /** _id de la categoría actual y su departamento (slug); se usan para mover el producto. */
+  categoriaId?: string;
+  departamento?: string;
   imagenUrl: string | null;
 }
