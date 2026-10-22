@@ -1,6 +1,8 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
 import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
+// @ts-ignore - módulo JS compartido
+import { limpiarReferenciaPrecio } from '../../lib/flujos-precio.mjs';
 
 function generarSlug(texto: string) {
   return texto
@@ -36,6 +38,12 @@ export const POST: APIRoute = async ({ request }) => {
     const precioTexto = formData.get('precio') as string | null;
     const cantidadTexto = formData.get('cantidad') as string | null;
     const hash = formData.get('hash') as string | null;
+    let referenciaPrecio = null;
+    try {
+      referenciaPrecio = limpiarReferenciaPrecio(JSON.parse((formData.get('referenciaPrecio') as string) || 'null'));
+    } catch {
+      referenciaPrecio = null;
+    }
 
     if (!fotoPrincipal || !(fotoPrincipal instanceof File) || fotoPrincipal.size === 0) {
       return jsonError('Falta la foto principal');
@@ -98,6 +106,7 @@ export const POST: APIRoute = async ({ request }) => {
     if (edicion) documento.edicion = edicion;
     if (edadRecomendada) documento.edadRecomendada = edadRecomendada;
     if (altTexto) documento.altTexto = altTexto;
+    if (referenciaPrecio) documento.referenciaPrecio = referenciaPrecio;
 
     const creado = await client.create(documento);
 

@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { createClient } from '@sanity/client';
-import { analizarProducto } from '../src/lib/gemini-producto.mjs';
+import { analizarProducto, buscarReferenciaPrecio } from '../src/lib/gemini-producto.mjs';
+import { flujoParaDepartamento } from '../src/lib/flujos-precio.mjs';
 
 const client = createClient({
   projectId: process.env.SANITY_PROJECT_ID,
@@ -20,6 +21,36 @@ function mostrarIdentificacion(datos) {
   if (datos.confianza === 'baja') console.log('   !! Confianza baja: revisa titulo y descripcion antes de publicar.');
   if (datos.datosWeb.length > 0) console.log(`   Datos tomados de internet: ${datos.datosWeb.join(' | ')}`);
   for (const fuente of datos.fuentes) console.log(`   Fuente: ${fuente.titulo} -> ${fuente.url}`);
+}
+
+async function referenciaParaProducto(datos, departamento) {
+  // Solo autos a escala, juguetes y Pokémon. El departamento manda; si no, lo que clasificó Gemini.
+  const flujo = flujoParaDepartamento(departamento) || (datos.tipoPrecio !== 'otro' ? datos.tipoPrecio : null);
+  if (!flujo) return null;
+  try {
+    const ref = await buscarReferenciaPrecio({
+      apiKey: process.env.GEMINI_API_KEY,
+      flujo,
+      producto: {
+        titulo: datos.titulo,
+        productoIdentificado: datos.productoIdentificado,
+        marca: datos.marca,
+        edicion: datos.edicion,
+        palabrasClave: datos.palabrasClave,
+        alertaValor: datos.alertaValor,
+      },
+    });
+    if (ref?.alertaValor) console.log(`  !! ${ref.alertaValor}`);
+    for (const p of ref?.precios || []) {
+      const pesos = p.moneda === 'USD' ? `US$${p.precio}${p.mxn ? ` (~$${p.mxn} MXN)` : ''}` : `$${p.precio} MXN`;
+      console.log(`  Precio ref.: ${p.tienda} (${p.tipo}) ${pesos}${p.detalle ? ` - ${p.detalle}` : ''}`);
+    }
+    if (ref && ref.precios.length === 0) console.log(`  Precio ref.: no se encontraron precios confiables${ref.nota ? ` (${ref.nota})` : ''}`);
+    return ref;
+  } catch (error) {
+    console.log(`  (No se pudo buscar referencia de precio: ${error.message})`);
+    return null;
+  }
 }
 
 function generarSlug(texto) {
@@ -96,7 +127,7 @@ async function main() {
 
   console.log('3. Buscando la categoria en Sanity...');
   const categoria = await client.fetch(
-    `*[_type == "categoria" && titulo == $titulo][0]{_id}`,
+    `*[_type == "categoria" && titulo == $titulo][0]{_id, departamento}`,
     { titulo: categoriaTitulo }
   );
 
@@ -104,6 +135,8 @@ async function main() {
     console.error(`No se encontro una categoria publicada con el titulo "${categoriaTitulo}". Verifica el nombre exacto en Sanity Studio.`);
     process.exit(1);
   }
+
+  const referenciaPrecio = await referenciaParaProducto(datos, categoria.departamento);
 
   console.log('4. Subiendo la imagen comprimida a Sanity...');
   const asset = await client.assets.upload('image', imageBufferSubida, {
@@ -131,6 +164,7 @@ async function main() {
     ...(datos.edicion ? { edicion: datos.edicion } : {}),
     ...(datos.edadRecomendada ? { edadRecomendada: datos.edadRecomendada } : {}),
     ...(datos.altTexto ? { altTexto: datos.altTexto } : {}),
+    ...(referenciaPrecio ? { referenciaPrecio } : {}),
   };
 
   const creado = await client.create(documento);

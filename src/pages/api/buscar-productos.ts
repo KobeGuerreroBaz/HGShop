@@ -36,7 +36,8 @@ export const GET: APIRoute = async ({ request, url }) => {
         imagenPrincipal,
         "categoriaTitulo": categoria->titulo,
         "categoriaId": categoria._ref,
-        "departamento": categoria->departamento
+        "departamento": categoria->departamento,
+        referenciaPrecio
       } | order(titulo asc) [0...20]`,
       { patron }
     );
@@ -53,6 +54,7 @@ export const GET: APIRoute = async ({ request, url }) => {
       categoriaTitulo: p.categoriaTitulo,
       categoriaId: p.categoriaId,
       departamento: p.departamento,
+      referenciaPrecio: p.referenciaPrecio || null,
       imagenUrl: p.imagenPrincipal ? urlFor(p.imagenPrincipal).width(200).auto('format').url() : null,
     }));
 

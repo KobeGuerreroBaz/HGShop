@@ -66,6 +66,10 @@ import Layout from '../layouts/Layout.astro';
 
         <div id="formulario" class="hidden mt-4 space-y-3">
           <div id="caja-identificacion" class="hidden rounded-md border px-3 py-2 text-xs space-y-1"></div>
+          <div id="caja-precio" class="hidden"></div>
+          <button id="boton-buscar-precio" type="button" class="hidden w-full border border-sky-300 text-sky-900 bg-sky-50 rounded-md py-2 text-xs font-medium">
+            💲 Buscar referencia de precio
+          </button>
           <div>
             <label class="text-xs text-neutral-500">Título</label>
             <input id="campo-titulo" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
@@ -186,6 +190,9 @@ import Layout from '../layouts/Layout.astro';
 </style>
 
 <script>
+  import { flujoParaDepartamento } from '../lib/flujos-precio.mjs';
+  import { mostrarCargandoPrecio, mostrarErrorPrecio, pintarReferenciaPrecio } from '../lib/vista-precio';
+
   const CLAVE_STORAGE = 'hgshop-upload-pin';
   let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
 
@@ -239,6 +246,10 @@ import Layout from '../layouts/Layout.astro';
   let blobsGaleriaComprimidos: Blob[] = [];
   let hashPrincipal = '';
   let analisisEnProceso = false;
+  // Referencia de precio (solo autos a escala, juguetes y Pokémon). Nunca llena el precio.
+  let referenciaPrecio: any = null;
+  let busquedaPrecioEnCurso = false;
+  let turnoAnalisis = 0; // para ignorar respuestas de un producto anterior
 
   const inputFoto = document.getElementById('input-foto') as HTMLInputElement;
   const zonaPegar = document.getElementById('zona-pegar') as HTMLElement;
@@ -251,6 +262,8 @@ import Layout from '../layouts/Layout.astro';
   const estadoAnalisis = document.getElementById('estado-analisis') as HTMLElement;
   const formulario = document.getElementById('formulario') as HTMLElement;
   const cajaIdentificacion = document.getElementById('caja-identificacion') as HTMLElement;
+  const cajaPrecio = document.getElementById('caja-precio') as HTMLElement;
+  const botonBuscarPrecio = document.getElementById('boton-buscar-precio') as HTMLButtonElement;
   const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement;
   const campoDescripcion = document.getElementById('campo-descripcion') as HTMLTextAreaElement;
   const campoDepartamento = document.getElementById('campo-departamento') as unknown as HTMLSelectElement;
@@ -644,6 +657,13 @@ import Layout from '../layouts/Layout.astro';
       cajaIdentificacion.appendChild(linea);
     }
 
+    if (datos.alertaValor) {
+      const alerta = document.createElement('p');
+      alerta.className = 'rounded bg-amber-100 border border-amber-300 text-amber-900 px-2 py-1 font-medium';
+      alerta.textContent = `⚠️ ${datos.alertaValor}`;
+      cajaIdentificacion.appendChild(alerta);
+    }
+
     if (datos.avisoBusqueda) {
       const aviso = document.createElement('p');
       aviso.className = 'opacity-70';
@@ -653,6 +673,65 @@ import Layout from '../layouts/Layout.astro';
 
     cajaIdentificacion.classList.remove('hidden');
   }
+
+  function departamentoElegido(): string {
+    const valor = campoDepartamento.value;
+    return valor && valor !== VALOR_NUEVO_DEPARTAMENTO ? valor : '';
+  }
+
+  /** Flujo de precio: el departamento elegido manda; si no, lo que clasificó Gemini. */
+  function flujoActual(): string | null {
+    const porDepartamento = flujoParaDepartamento(departamentoElegido());
+    if (porDepartamento) return porDepartamento;
+    const tipo = datosExtraidos?.tipoPrecio;
+    return tipo && tipo !== 'otro' ? tipo : null;
+  }
+
+  function actualizarBotonPrecio() {
+    const mostrar = !!datosExtraidos && !referenciaPrecio && !busquedaPrecioEnCurso && !!flujoActual();
+    botonBuscarPrecio.classList.toggle('hidden', !mostrar);
+  }
+
+  async function buscarPrecio() {
+    const flujo = flujoActual();
+    if (!flujo || !datosExtraidos || busquedaPrecioEnCurso) return;
+    const miTurno = turnoAnalisis;
+    busquedaPrecioEnCurso = true;
+    actualizarBotonPrecio();
+    mostrarCargandoPrecio(cajaPrecio);
+    try {
+      const respuesta = await fetch('/api/referencia-precio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headersConPin() },
+        body: JSON.stringify({
+          flujo,
+          departamento: departamentoElegido(),
+          titulo: campoTitulo.value,
+          productoIdentificado: datosExtraidos.productoIdentificado,
+          marca: campoMarca.value,
+          edicion: camposOpcionales.find((c) => c.clave === 'edicion')?.campo.value || '',
+          palabrasClave: palabrasClaveDelCampo(),
+          alertaValor: datosExtraidos.alertaValor || '',
+        }),
+      });
+      const resultado = await respuesta.json();
+      if (miTurno !== turnoAnalisis) return; // ya se pasó a otro producto
+      if (!respuesta.ok || resultado.error) throw new Error(resultado.error || `Error ${respuesta.status}`);
+      referenciaPrecio = resultado;
+      pintarReferenciaPrecio(cajaPrecio, resultado);
+    } catch (error: any) {
+      if (miTurno !== turnoAnalisis) return;
+      mostrarErrorPrecio(cajaPrecio, error.message);
+    } finally {
+      if (miTurno === turnoAnalisis) {
+        busquedaPrecioEnCurso = false;
+        actualizarBotonPrecio();
+      }
+    }
+  }
+
+  botonBuscarPrecio.addEventListener('click', () => buscarPrecio());
+  campoDepartamento.addEventListener('change', () => actualizarBotonPrecio());
 
   async function calcularHash(archivo: File | Blob): Promise<string> {
     const buffer = await archivo.arrayBuffer();
@@ -665,6 +744,11 @@ import Layout from '../layouts/Layout.astro';
     if (fotosAcumuladas.length === 0 || analisisEnProceso) return;
 
     analisisEnProceso = true;
+    turnoAnalisis++;
+    referenciaPrecio = null;
+    busquedaPrecioEnCurso = false;
+    cajaPrecio.classList.add('hidden');
+    cajaPrecio.innerHTML = '';
     botonAnalizar.disabled = true;
     const textoOriginalBoton = botonAnalizar.textContent;
     botonAnalizar.textContent = 'Analizando, espera...';
@@ -738,6 +822,14 @@ import Layout from '../layouts/Layout.astro';
       // Se ajusta después de mostrar el formulario: oculto mide 0 de alto.
       ajustarAlturaTextarea(campoDescripcion);
       ajustarAlturaTextarea(campoPalabrasClave);
+
+      // Autos a escala, juguetes y Pokémon: buscar la referencia de precio sin
+      // detener al usuario (mientras llena departamento, cantidad, etc.).
+      if (datosExtraidos.tipoPrecio && datosExtraidos.tipoPrecio !== 'otro') {
+        buscarPrecio();
+      } else {
+        actualizarBotonPrecio();
+      }
     } catch (error: any) {
       estadoAnalisis.textContent = `Ocurrió un error inesperado: ${error.message}. Intenta de nuevo.`;
     } finally {
@@ -778,6 +870,7 @@ import Layout from '../layouts/Layout.astro';
       if (valor) formData.append(opcional.clave, valor);
     }
     if (datosExtraidos.altTexto) formData.append('altTexto', datosExtraidos.altTexto);
+    if (referenciaPrecio) formData.append('referenciaPrecio', JSON.stringify(referenciaPrecio));
 
     const respuesta = await fetch('/api/crear-producto', {
       method: 'POST',
@@ -816,6 +909,12 @@ import Layout from '../layouts/Layout.astro';
     cajaIdentificacion.classList.add('hidden');
     cajaIdentificacion.innerHTML = '';
     campoPalabrasClave.value = '';
+    turnoAnalisis++;
+    referenciaPrecio = null;
+    busquedaPrecioEnCurso = false;
+    cajaPrecio.classList.add('hidden');
+    cajaPrecio.innerHTML = '';
+    botonBuscarPrecio.classList.add('hidden');
     for (const opcional of camposOpcionales) {
       opcional.campo.value = '';
       opcional.grupo.classList.add('hidden');
