@@ -65,6 +65,7 @@ import Layout from '../layouts/Layout.astro';
         <div id="estado-analisis" class="mt-3 text-sm text-neutral-500"></div>
 
         <div id="formulario" class="hidden mt-4 space-y-3">
+          <div id="caja-identificacion" class="hidden rounded-md border px-3 py-2 text-xs space-y-1"></div>
           <div>
             <label class="text-xs text-neutral-500">Título</label>
             <input id="campo-titulo" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
@@ -222,6 +223,7 @@ import Layout from '../layouts/Layout.astro';
   const previewFoto = document.getElementById('preview-foto') as HTMLImageElement;
   const estadoAnalisis = document.getElementById('estado-analisis') as HTMLElement;
   const formulario = document.getElementById('formulario') as HTMLElement;
+  const cajaIdentificacion = document.getElementById('caja-identificacion') as HTMLElement;
   const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement;
   const campoDescripcion = document.getElementById('campo-descripcion') as HTMLTextAreaElement;
   const campoDepartamento = document.getElementById('campo-departamento') as unknown as HTMLSelectElement;
@@ -513,6 +515,67 @@ import Layout from '../layouts/Layout.astro';
     });
   }
 
+  const ESTILOS_CONFIANZA: Record<string, { clases: string; texto: string }> = {
+    alta: { clases: 'border-green-200 bg-green-50 text-green-900', texto: 'Confianza alta' },
+    media: { clases: 'border-amber-200 bg-amber-50 text-amber-900', texto: 'Confianza media — revisa los datos' },
+    baja: { clases: 'border-red-200 bg-red-50 text-red-900', texto: 'Confianza baja — revisa título y descripción' },
+  };
+
+  function agregarLinea(contenedor: HTMLElement, etiqueta: string, valor: string) {
+    const linea = document.createElement('p');
+    const fuerte = document.createElement('span');
+    fuerte.className = 'font-semibold';
+    fuerte.textContent = `${etiqueta} `;
+    linea.appendChild(fuerte);
+    linea.appendChild(document.createTextNode(valor));
+    contenedor.appendChild(linea);
+  }
+
+  function mostrarIdentificacion(datos: any) {
+    cajaIdentificacion.innerHTML = '';
+    const estilo = ESTILOS_CONFIANZA[datos.confianza] || ESTILOS_CONFIANZA.baja;
+    cajaIdentificacion.className = `rounded-md border px-3 py-2 text-xs space-y-1 ${estilo.clases}`;
+
+    agregarLinea(cajaIdentificacion, 'Identificado como:', datos.productoIdentificado || datos.titulo || '—');
+    agregarLinea(
+      cajaIdentificacion,
+      datos.busquedaUsada ? estilo.texto : 'Sin búsqueda web',
+      datos.busquedaUsada ? '' : '(se usó solo la foto)'
+    );
+
+    if (Array.isArray(datos.datosWeb) && datos.datosWeb.length > 0) {
+      agregarLinea(cajaIdentificacion, 'Datos de internet:', datos.datosWeb.join(' · '));
+    }
+
+    if (Array.isArray(datos.fuentes) && datos.fuentes.length > 0) {
+      const linea = document.createElement('p');
+      const fuerte = document.createElement('span');
+      fuerte.className = 'font-semibold';
+      fuerte.textContent = 'Fuentes: ';
+      linea.appendChild(fuerte);
+      datos.fuentes.forEach((fuente: { titulo: string; url: string }, i: number) => {
+        if (i > 0) linea.appendChild(document.createTextNode(' · '));
+        const enlace = document.createElement('a');
+        enlace.href = fuente.url;
+        enlace.target = '_blank';
+        enlace.rel = 'noopener noreferrer';
+        enlace.className = 'underline';
+        enlace.textContent = fuente.titulo;
+        linea.appendChild(enlace);
+      });
+      cajaIdentificacion.appendChild(linea);
+    }
+
+    if (datos.avisoBusqueda) {
+      const aviso = document.createElement('p');
+      aviso.className = 'opacity-70';
+      aviso.textContent = datos.avisoBusqueda;
+      cajaIdentificacion.appendChild(aviso);
+    }
+
+    cajaIdentificacion.classList.remove('hidden');
+  }
+
   async function calcularHash(archivo: File | Blob): Promise<string> {
     const buffer = await archivo.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
@@ -560,7 +623,7 @@ import Layout from '../layouts/Layout.astro';
         blobsGaleriaComprimidos.push(comprimida);
       }
 
-      estadoAnalisis.textContent = 'Analizando con IA...';
+      estadoAnalisis.textContent = 'Identificando el producto y buscándolo en internet...';
 
       const formData = new FormData();
       formData.append('foto', blobPrincipalComprimido, 'foto.jpg');
@@ -581,6 +644,7 @@ import Layout from '../layouts/Layout.astro';
       }
 
       estadoAnalisis.textContent = 'Revisa y completa los datos:';
+      mostrarIdentificacion(datosExtraidos);
       campoTitulo.value = datosExtraidos.titulo || '';
       campoDescripcion.value = datosExtraidos.descripcion || '';
       campoMarca.value = datosExtraidos.marca || '';
@@ -660,6 +724,8 @@ import Layout from '../layouts/Layout.astro';
     campoContexto.value = '';
     campoContexto.style.height = 'auto';
     nuevaCategoriaForm.classList.add('hidden');
+    cajaIdentificacion.classList.add('hidden');
+    cajaIdentificacion.innerHTML = '';
     actualizarMiniaturas();
     tarjetaActual.classList.add('hidden');
     formulario.classList.add('hidden');

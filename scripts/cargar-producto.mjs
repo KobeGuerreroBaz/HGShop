@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { createClient } from '@sanity/client';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { analizarProducto } from '../src/lib/gemini-producto.mjs';
 
 const client = createClient({
   projectId: process.env.SANITY_PROJECT_ID,
@@ -13,44 +13,13 @@ const client = createClient({
   useCdn: false,
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const ESQUEMA_RESPUESTA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    titulo: { type: SchemaType.STRING },
-    marca: { type: SchemaType.STRING, nullable: true },
-    descripcion: { type: SchemaType.STRING },
-    altTexto: { type: SchemaType.STRING },
-    palabrasClave: {
-      type: SchemaType.ARRAY,
-      items: { type: SchemaType.STRING },
-    },
-    edadRecomendada: { type: SchemaType.STRING, nullable: true },
-    capacidad: { type: SchemaType.STRING, nullable: true },
-    edicion: { type: SchemaType.STRING, nullable: true },
-  },
-  required: ['titulo', 'descripcion', 'altTexto', 'palabrasClave'],
-};
-
-function construirPrompt(contexto) {
-  let prompt = `Analiza esta foto de un producto de venta y completa los campos del esquema.\n`;
-
-  if (contexto) {
-    prompt += `\nEl vendedor dio este contexto adicional sobre el producto: "${contexto}"\n`;
-  }
-
-  prompt += `
-Reglas importantes:
-- Responde SIEMPRE en español, sin importar el idioma del texto que veas en el empaque, etiqueta o producto.
-- descripcion: escribe en tono de venta, resaltando lo atractivo del producto (calidad, diseno, uso, para quien es ideal) sin exagerar ni inventar cualidades que no se ven o no fueron confirmadas. Nada de frases genericas vacias tipo "producto de excelente calidad" - se especifico sobre que lo hace atractivo.
-- La descripcion tambien debe ayudar a que la pagina aparezca en buscadores como Google: menciona el tipo de producto, marca y caracteristica principal en la primera oracion, usando el lenguaje natural con el que un comprador buscaria este producto (ej. "portagel antibacterial", "wallflower aromatizante", "hot wheels edicion limitada"). No repitas la misma palabra clave de forma forzada ni antinatural, escribe para un humano primero.
-- altTexto: escribe una descripcion breve (maximo 125 caracteres) de LO QUE SE VE EN LA FOTO especificamente - no repitas el titulo tal cual. Menciona color, forma o detalle visible distintivo (ej. "Termo Stanley FlowState azul marino con tapa abatible" en vez de solo "Termo Stanley"). Esto es para el atributo alt de la imagen, pensado para accesibilidad y buscadores de imagenes, no para venta.
-- Si el vendedor dio contexto arriba, tratalo como informacion confirmada y usalo con seguridad en la descripcion.
-- palabrasClave: usa 5 a 8 terminos ESPECIFICOS que un cliente usaria para buscar este producto exacto (marca, modelo, color, personaje, coleccion, caracteristica distintiva). NO incluyas palabras genericas de categoria como "juguete", "producto", "articulo", "accesorio".
-- Los campos marca, edadRecomendada, capacidad y edicion deben ser null si no aplican o no son visibles, a menos que el contexto del vendedor los confirme.`;
-
-  return prompt;
+function mostrarIdentificacion(datos) {
+  if (datos.avisoBusqueda) console.log(`   Aviso: ${datos.avisoBusqueda}`);
+  console.log(`   Identificado como: ${datos.productoIdentificado}`);
+  console.log(`   Confianza: ${datos.confianza.toUpperCase()}${datos.busquedaUsada ? '' : ' (sin busqueda web)'}`);
+  if (datos.confianza === 'baja') console.log('   !! Confianza baja: revisa titulo y descripcion antes de publicar.');
+  if (datos.datosWeb.length > 0) console.log(`   Datos tomados de internet: ${datos.datosWeb.join(' | ')}`);
+  for (const fuente of datos.fuentes) console.log(`   Fuente: ${fuente.titulo} -> ${fuente.url}`);
 }
 
 function generarSlug(texto) {
@@ -105,27 +74,25 @@ async function main() {
   const pesoSubidaKB = Math.round(imageBufferSubida.length / 1024);
   console.log(`   Peso original: ${pesoOriginalKB} KB -> Peso comprimido: ${pesoSubidaKB} KB`);
 
-  console.log('2. Analizando foto con Gemini...');
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-flash-lite-latest',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: ESQUEMA_RESPUESTA,
-    },
+  console.log('2. Analizando foto con Gemini (buscando el producto en internet)...');
+  const datos = await analizarProducto({
+    apiKey: process.env.GEMINI_API_KEY,
+    imagenBase64: imageBufferAnalisis.toString('base64'),
+    mimeType: 'image/jpeg',
+    contexto,
   });
 
-  const imagePart = {
-    inlineData: {
-      data: imageBufferAnalisis.toString('base64'),
-      mimeType: 'image/jpeg',
-    },
-  };
-
-  const prompt = construirPrompt(contexto);
-  const result = await model.generateContent([prompt, imagePart]);
-  const datos = JSON.parse(result.response.text());
-
-  console.log('Datos extraidos:', datos);
+  mostrarIdentificacion(datos);
+  console.log('Datos extraidos:', {
+    titulo: datos.titulo,
+    marca: datos.marca,
+    descripcion: datos.descripcion,
+    altTexto: datos.altTexto,
+    palabrasClave: datos.palabrasClave,
+    edadRecomendada: datos.edadRecomendada,
+    capacidad: datos.capacidad,
+    edicion: datos.edicion,
+  });
 
   console.log('3. Buscando la categoria en Sanity...');
   const categoria = await client.fetch(
