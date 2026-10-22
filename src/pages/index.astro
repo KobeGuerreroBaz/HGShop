@@ -128,12 +128,14 @@ const imagenInicio = productoDestacadoInicio
         - type/inputmode/enterkeyhint="search": teclado de búsqueda con tecla "Buscar".
         - autocomplete/autocorrect/autocapitalize/spellcheck apagados: sin sugerencias de
           contactos, sin MAYÚSCULA inicial forzada y sin autocorrector cambiando nombres.
+        - name="search": Safari ignora autocomplete="off" para "Autorrellenar contacto";
+          que el nombre diga "search" es lo que lo hace tratarlo como búsqueda.
         - text-base en celular (16px): Safari en iPhone no hace zoom al tocarlo.
       -->
       <input
         type="search"
         id="buscador"
-        name="q"
+        name="search"
         inputmode="search"
         enterkeyhint="search"
         autocomplete="off"
