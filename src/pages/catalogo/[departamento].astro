@@ -167,11 +167,26 @@ const datosItemList = {
 
   <div class="sticky z-10 bg-white border-b border-neutral-100 px-6 py-3" style="top: var(--alto-header, 68px);">
     <div class="max-w-2xl mx-auto">
+      <!--
+        Campo de búsqueda pensado para celular (iPhone y Android):
+        - type/inputmode/enterkeyhint="search": teclado de búsqueda con tecla "Buscar".
+        - autocomplete/autocorrect/autocapitalize/spellcheck apagados: sin sugerencias de
+          contactos, sin MAYÚSCULA inicial forzada y sin autocorrector cambiando nombres.
+        - text-base en celular (16px): Safari en iPhone no hace zoom al tocarlo.
+      -->
       <input
-        type="text"
+        type="search"
         id="buscador"
+        name="q"
+        inputmode="search"
+        enterkeyhint="search"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="none"
+        spellcheck="false"
+        aria-label="Buscar productos"
         placeholder={`Buscar en ${nombreDepartamentoTexto}...`}
-        class="w-full rounded-full border border-neutral-200 px-6 py-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+        class="w-full appearance-none rounded-full border border-neutral-200 px-6 py-3 text-base sm:text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
       />
       {categoriasConConteo.length > 1 && (
         <div id="fila-categorias" class="mt-2 flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none;">
@@ -311,6 +326,15 @@ const datosItemList = {
       contenedor.dataset.visibles = String(nuevosVisibles);
       actualizarBotonYContador(contenedor);
     });
+  });
+
+  // Tecla "Buscar"/Intro del teclado: la búsqueda ya se aplicó al escribir;
+  // solo se cierra el teclado para que se vean los resultados.
+  input?.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter') {
+      evento.preventDefault();
+      input.blur();
+    }
   });
 
   input?.addEventListener('input', () => {
