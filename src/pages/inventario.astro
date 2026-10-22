@@ -24,7 +24,24 @@ import Layout from '../layouts/Layout.astro';
           <span class="block font-medium text-neutral-900">Buscar y editar producto</span>
           <span class="block text-xs text-neutral-500 mt-1">Busca por nombre para cambiar su precio, moverlo de departamento o eliminarlo</span>
         </button>
+        <button id="boton-modo-demanda" type="button" class="w-full text-left border border-neutral-200 rounded-xl px-4 py-4">
+          <span class="block font-medium text-neutral-900">Lo que buscan tus clientes</span>
+          <span class="block text-xs text-neutral-500 mt-1">Qué escriben en el buscador del sitio y qué buscaron sin encontrarlo</span>
+        </button>
       </div>
+    </div>
+
+    <div id="pantalla-demanda" class="hidden">
+      <button id="boton-volver-modo-3" type="button" class="text-xs text-neutral-400 underline">← Cambiar modo</button>
+      <h1 class="text-xl font-semibold text-neutral-900 mt-2">Lo que buscan tus clientes</h1>
+      <p id="demanda-estado" class="text-sm text-neutral-500 mt-1"></p>
+
+      <h2 class="mt-6 font-semibold text-neutral-900">Buscaron y no encontraron</h2>
+      <p class="text-xs text-neutral-500 mt-1">Oportunidades: súbelo si lo tienes en bodega, o considéralo para tu próxima compra.</p>
+      <ol id="lista-sin-resultados" class="mt-3 space-y-1"></ol>
+
+      <h2 class="mt-8 font-semibold text-neutral-900">Lo más buscado</h2>
+      <ol id="lista-mas-buscadas" class="mt-3 space-y-1"></ol>
     </div>
 
     <div id="pantalla-departamento" class="hidden">
@@ -144,7 +161,7 @@ import Layout from '../layouts/Layout.astro';
 </style>
 
 <script>
-  import type { DepartamentoConConteo, ProductoParaAdmin } from '../lib/tipos';
+  import type { DepartamentoConConteo, ProductoParaAdmin, MetadatosBusqueda, ResumenBusquedas } from '../lib/tipos';
 
   const CLAVE_STORAGE = 'hgshop-upload-pin';
   let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
@@ -162,6 +179,12 @@ import Layout from '../layouts/Layout.astro';
 
   const botonModoFaltantes = document.getElementById('boton-modo-faltantes') as HTMLButtonElement;
   const botonModoBusqueda = document.getElementById('boton-modo-busqueda') as HTMLButtonElement;
+  const botonModoDemanda = document.getElementById('boton-modo-demanda') as HTMLButtonElement;
+  const pantallaDemanda = document.getElementById('pantalla-demanda') as HTMLElement;
+  const botonVolverModo3 = document.getElementById('boton-volver-modo-3') as HTMLButtonElement;
+  const demandaEstado = document.getElementById('demanda-estado') as HTMLElement;
+  const listaSinResultados = document.getElementById('lista-sin-resultados') as HTMLElement;
+  const listaMasBuscadas = document.getElementById('lista-mas-buscadas') as HTMLElement;
   const botonVolverModo1 = document.getElementById('boton-volver-modo-1') as HTMLButtonElement;
   const botonVolverModo2 = document.getElementById('boton-volver-modo-2') as HTMLButtonElement;
 
@@ -224,6 +247,7 @@ import Layout from '../layouts/Layout.astro';
       pantallaBusqueda,
       pantallaProducto,
       pantallaFin,
+      pantallaDemanda,
     ].forEach((p) => p.classList.add('hidden'));
     pantalla.classList.remove('hidden');
     if (pantalla === pantallaModo) cargarConteoSinPrecio();
@@ -281,6 +305,50 @@ import Layout from '../layouts/Layout.astro';
 
   botonVolverModo1.addEventListener('click', () => mostrarPantalla(pantallaModo));
   botonVolverModo2.addEventListener('click', () => mostrarPantalla(pantallaModo));
+  botonVolverModo3.addEventListener('click', () => mostrarPantalla(pantallaModo));
+
+  function filaDemanda(termino: MetadatosBusqueda, mostrarSinResultados: boolean): HTMLLIElement {
+    const fila = document.createElement('li');
+    fila.className = 'flex items-baseline justify-between gap-3 border-b border-neutral-100 py-2 text-sm';
+    const texto = document.createElement('span');
+    texto.className = 'text-neutral-900 break-words min-w-0';
+    texto.textContent = termino.t;
+    const datos = document.createElement('span');
+    datos.className = 'shrink-0 text-xs text-neutral-500 text-right';
+    const veces = mostrarSinResultados ? termino.sin : termino.n;
+    datos.textContent = `${veces} ${veces === 1 ? 'vez' : 'veces'} · ${termino.ult}`;
+    fila.append(texto, datos);
+    return fila;
+  }
+
+  function llenarLista(lista: HTMLElement, terminos: MetadatosBusqueda[], mostrarSinResultados: boolean) {
+    lista.innerHTML = '';
+    if (terminos.length === 0) {
+      const vacio = document.createElement('li');
+      vacio.className = 'text-sm text-neutral-400';
+      vacio.textContent = 'Todavía no hay datos.';
+      lista.appendChild(vacio);
+      return;
+    }
+    terminos.forEach((t) => lista.appendChild(filaDemanda(t, mostrarSinResultados)));
+  }
+
+  botonModoDemanda.addEventListener('click', async () => {
+    mostrarPantalla(pantallaDemanda);
+    demandaEstado.textContent = 'Cargando...';
+    listaSinResultados.innerHTML = '';
+    listaMasBuscadas.innerHTML = '';
+    try {
+      const respuesta = await fetch('/api/busquedas', { headers: headersConPin() });
+      if (!respuesta.ok) throw new Error(`Error ${respuesta.status}`);
+      const resumen: ResumenBusquedas = await respuesta.json();
+      demandaEstado.textContent = `${resumen.total} término${resumen.total === 1 ? '' : 's'} distinto${resumen.total === 1 ? '' : 's'} en los últimos 6 meses.`;
+      llenarLista(listaSinResultados, resumen.sinResultados, true);
+      llenarLista(listaMasBuscadas, resumen.masBuscadas, false);
+    } catch (error: any) {
+      demandaEstado.textContent = `No se pudo cargar: ${error.message}`;
+    }
+  });
 
   async function cargarDepartamentos() {
     listaDepartamentos.innerHTML = '<p class="text-sm text-neutral-400">Cargando...</p>';

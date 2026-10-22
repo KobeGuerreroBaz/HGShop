@@ -3,6 +3,7 @@ export const prerender = false;
 
 import { sanityClient, urlFor } from '../lib/sanity';
 import Layout from '../layouts/Layout.astro';
+import { buscar, prepararTexto } from '../lib/buscador';
 
 // Página pensada para COMPARTIR búsquedas (hgstoremx.com/buscar?q=bluey).
 //
@@ -39,13 +40,19 @@ try {
   console.error('buscar.astro: no se pudo consultar Sanity', error);
 }
 
-// Mismo criterio de coincidencia que el buscador del inicio (título + palabras clave).
-const coincidentes = productos.filter((p: any) =>
-  `${p.titulo} ${(p.palabrasClave || []).join(' ')}`.toLowerCase().includes(consulta)
+// Mismo motor que el buscador del inicio (acentos, sinónimos, plurales, errores de dedo),
+// así la foto de la vista previa corresponde a lo que la persona va a ver al abrir el link.
+const { resultados } = buscar(
+  productos.map((p: any) => ({
+    ...prepararTexto(p.titulo, p.palabrasClave || []),
+    agotado: !!p.agotado,
+    dato: p,
+  })),
+  consultaCruda
 );
-const destacado =
-  coincidentes.find((p: any) => p.imagenPrincipal && !p.agotado) ||
-  coincidentes.find((p: any) => p.imagenPrincipal);
+const coincidentes = resultados.map((r) => r.dato);
+// El buscador ya pone primero lo disponible.
+const destacado = coincidentes.find((p: any) => p.imagenPrincipal);
 
 const hayResultados = coincidentes.length > 0;
 const nombreBusqueda = consultaCruda.charAt(0).toUpperCase() + consultaCruda.slice(1);

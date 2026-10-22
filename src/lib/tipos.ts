@@ -25,3 +25,20 @@ export interface ProductoParaAdmin {
   departamento?: string;
   imagenUrl: string | null;
 }
+
+/** Lo que se guarda por cada término buscado en el catálogo (registrar-busqueda.ts). */
+export interface MetadatosBusqueda {
+  t: string; // cómo lo escribió la última persona
+  n: number; // veces buscado
+  sin: number; // veces sin resultados
+  ultRes: number; // resultados la última vez
+  ult: string; // fecha de la última vez (AAAA-MM-DD)
+  pag: string; // página donde se buscó la última vez
+}
+
+/** Forma que devuelve busquedas.ts y consume inventario.astro. */
+export interface ResumenBusquedas {
+  total: number;
+  masBuscadas: MetadatosBusqueda[];
+  sinResultados: MetadatosBusqueda[];
+}
