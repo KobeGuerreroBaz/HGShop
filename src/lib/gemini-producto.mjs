@@ -43,13 +43,14 @@ const ESQUEMA_RESPUESTA = {
 };
 
 const REGLAS_REDACCION = `
-Reglas de redaccion:
+Reglas de redacción:
 - Responde SIEMPRE en español, sin importar el idioma de la foto, del empaque o de las fuentes.
+- Escribe con ortografía correcta en español: acentos (á, é, í, ó, ú), ñ, ü y signos de apertura (¿ ¡). Ejemplos: "colección", "diseño", "acción", "metálicos", "automóviles", "superhéroes", "niños". Nunca omitas un acento ni cambies la ñ por n. Esto aplica a titulo, descripcion, altTexto y palabrasClave.
 - Redacta todo con tus propias palabras. Nunca copies ni parafrasees de cerca frases de Amazon, del fabricante u otra tienda; usa sus datos, no su texto.
-- descripcion: escribe en tono de venta, resaltando lo atractivo del producto (calidad, diseño, uso, para quien es ideal) sin exagerar ni inventar cualidades que no se ven o no fueron confirmadas. Nada de frases genericas vacias tipo "producto de excelente calidad" - se especifico sobre que lo hace atractivo.
-- La descripcion tambien debe ayudar a que la pagina aparezca en buscadores como Google: menciona el tipo de producto, marca y caracteristica principal en la primera oracion, usando el lenguaje natural con el que un comprador buscaria este producto (ej. "portagel antibacterial", "wallflower aromatizante", "hot wheels edicion limitada"). No repitas la misma palabra clave de forma forzada ni antinatural, escribe para un humano primero.
-- altTexto: escribe una descripcion breve (maximo 125 caracteres) de LO QUE SE VE EN LA FOTO especificamente - no repitas el titulo tal cual. Menciona color, forma o detalle visible distintivo (ej. "Termo Stanley FlowState azul marino con tapa abatible" en vez de solo "Termo Stanley"). Esto es para el atributo alt de la imagen, pensado para accesibilidad y buscadores de imagenes, no para venta.
-- palabrasClave: usa 5 a 8 terminos ESPECIFICOS que un cliente usaria para buscar este producto exacto (marca, modelo, color, personaje, coleccion, caracteristica distintiva). Incluye el codigo o numero de modelo si lo confirmaste. NO incluyas palabras genericas de categoria como "juguete", "producto", "articulo", "accesorio".`;
+- descripcion: escribe en tono de venta, resaltando lo atractivo del producto (calidad, diseño, uso, para quién es ideal) sin exagerar ni inventar cualidades que no se ven o no fueron confirmadas. Nada de frases genéricas vacías tipo "producto de excelente calidad"; sé específico sobre qué lo hace atractivo.
+- La descripción también debe ayudar a que la página aparezca en buscadores como Google: menciona el tipo de producto, la marca y la característica principal en la primera oración, usando el lenguaje natural con el que un comprador buscaría este producto (ej. "portagel antibacterial", "wallflower aromatizante", "hot wheels edición limitada"). No repitas la misma palabra clave de forma forzada ni antinatural; escribe primero para un humano.
+- altTexto: escribe una descripción breve (máximo 125 caracteres) de LO QUE SE VE EN LA FOTO específicamente; no repitas el título tal cual. Menciona color, forma o detalle visible distintivo (ej. "Termo Stanley FlowState azul marino con tapa abatible" en vez de solo "Termo Stanley"). Es para el atributo alt de la imagen, pensado para accesibilidad y buscadores de imágenes, no para venta.
+- palabrasClave: usa 5 a 8 términos ESPECÍFICOS que un cliente usaría para buscar este producto exacto (marca, modelo, color, personaje, colección, característica distintiva). Incluye el código o número de modelo si lo confirmaste. NO incluyas palabras genéricas de categoría como "juguete", "producto", "artículo", "accesorio".`;
 
 function construirPrompt(contexto, conBusqueda) {
   let prompt = `Analiza esta foto de un producto de venta y completa los campos del esquema.\n`;
@@ -60,30 +61,30 @@ function construirPrompt(contexto, conBusqueda) {
 
   prompt += `
 PASO 1 - Identifica el producto exacto antes de escribir:
-- Lee primero todo lo que sea identificador visible en la foto: marca, nombre del modelo, numero de modelo o SKU, codigo de barras/UPC, numero de coleccion (ej. "123/250"), codigo del juguete (ej. Hot Wheels "HKG45"), serie, año, capacidad o tamaño impreso (ej. "30 oz", "236 ml").
-- Si el vendedor dio contexto, usalo como pista principal; es informacion confirmada y tiene prioridad sobre cualquier otra fuente.
+- Lee primero todo lo que sea identificador visible en la foto: marca, nombre del modelo, número de modelo o SKU, código de barras/UPC, número de colección (ej. "123/250"), código del juguete (ej. Hot Wheels "HKG45"), serie, año, capacidad o tamaño impreso (ej. "30 oz", "236 ml").
+- Si el vendedor dio contexto, úsalo como pista principal; es información confirmada y tiene prioridad sobre cualquier otra fuente.
 `;
 
   if (conBusqueda) {
     prompt += `
 PASO 2 - Busca en Google para confirmar datos:
-- Busca usando los identificadores mas especificos que encontraste (codigo o modelo + marca), no descripciones genericas.
-- Prefiere como fuente el sitio oficial del fabricante; despues tiendas grandes (Amazon, Walmart, Target) o bases de datos de coleccionistas (ej. Hot Wheels Wiki para autos).
-- Solo usa un dato de internet si corresponde a ESTE producto exacto: mismo modelo, misma variante de color y mismo tamaño que se ve en la foto. Si hay varias versiones y no puedes saber cual es, usa solo lo que se ve en la foto.
-- Datos utiles que buscar: nombre oficial completo, serie o coleccion, año, medidas, capacidad, material, numero de piezas, edad recomendada del fabricante, caracteristicas funcionales (ej. "doble pared", "libre de BPA", "apto lavavajillas").
-- NO tomes de internet: precios, promociones, reseñas, calificaciones, garantias, informacion de envio ni frases de marketing de la tienda.
+- Busca usando los identificadores más específicos que encontraste (código o modelo + marca), no descripciones genéricas.
+- Prefiere como fuente el sitio oficial del fabricante; después tiendas grandes (Amazon, Walmart, Target) o bases de datos de coleccionistas (ej. Hot Wheels Wiki para autos).
+- Solo usa un dato de internet si corresponde a ESTE producto exacto: mismo modelo, misma variante de color y mismo tamaño que se ve en la foto. Si hay varias versiones y no puedes saber cuál es, usa solo lo que se ve en la foto.
+- Datos útiles que buscar: nombre oficial completo, serie o colección, año, medidas, capacidad, material, número de piezas, edad recomendada del fabricante, características funcionales (ej. "doble pared", "libre de BPA", "apto para lavavajillas").
+- NO tomes de internet: precios, promociones, reseñas, calificaciones, garantías, información de envío ni frases de marketing de la tienda.
 
-PASO 3 - Califica que tan seguro estas:
+PASO 3 - Califica qué tan seguro estás:
 - productoIdentificado: el nombre exacto del producto que confirmaste (ej. "Hot Wheels '71 Datsun 510, HW J-Imports 2024, #45/250").
-- confianza: "alta" si un identificador visible (codigo, modelo) coincidio con una fuente; "media" si coincide por marca, diseño y nombre pero sin codigo; "baja" si no encontraste el producto exacto. Si es "baja", no uses datos de internet: escribe solo con lo que se ve en la foto.
-- datosWeb: lista corta de los datos que SI tomaste de internet (ej. "capacidad 40 oz", "serie HW J-Imports 2024"), para que el vendedor los revise. Lista vacia si no usaste ninguno.
+- confianza: "alta" si un identificador visible (código, modelo) coincidió con una fuente; "media" si coincide por marca, diseño y nombre pero sin código; "baja" si no encontraste el producto exacto. Si es "baja", no uses datos de internet: escribe solo con lo que se ve en la foto.
+- datosWeb: lista corta de los datos que SÍ tomaste de internet (ej. "capacidad 40 oz", "serie HW J-Imports 2024"), para que el vendedor los revise. Lista vacía si no usaste ninguno.
 `;
   } else {
     prompt += `
-PASO 2 - En esta ocasion NO tienes acceso a internet: usa solo lo que se ve en la foto y el contexto del vendedor.
-- productoIdentificado: el nombre mas exacto que puedas leer en la foto.
+PASO 2 - En esta ocasión NO tienes acceso a internet: usa solo lo que se ve en la foto y el contexto del vendedor.
+- productoIdentificado: el nombre más exacto que puedas leer en la foto.
 - confianza: "baja".
-- datosWeb: lista vacia.
+- datosWeb: lista vacía.
 `;
   }
 
@@ -91,7 +92,7 @@ PASO 2 - En esta ocasion NO tienes acceso a internet: usa solo lo que se ve en l
   prompt += `
 - marca, edadRecomendada, capacidad y edicion: null si no aplican o no se confirmaron (por la foto, el contexto del vendedor${conBusqueda ? ' o una fuente con confianza alta/media' : ''}).
 
-Tu respuesta debe ser UNICAMENTE el objeto JSON del esquema, sin texto antes ni despues.`;
+Tu respuesta debe ser ÚNICAMENTE el objeto JSON del esquema, sin texto antes ni después.`;
 
   return prompt;
 }
