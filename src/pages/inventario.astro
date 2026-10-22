@@ -25,23 +25,32 @@ import Layout from '../layouts/Layout.astro';
           <span class="block text-xs text-neutral-500 mt-1">Busca por nombre para cambiar su precio, moverlo de departamento o eliminarlo</span>
         </button>
         <button id="boton-modo-demanda" type="button" class="w-full text-left border border-neutral-200 rounded-xl px-4 py-4">
-          <span class="block font-medium text-neutral-900">Lo que buscan tus clientes</span>
-          <span class="block text-xs text-neutral-500 mt-1">Qué escriben en el buscador del sitio y qué buscaron sin encontrarlo</span>
+          <span class="block font-medium text-neutral-900">Lo que buscan y piden tus clientes</span>
+          <span class="block text-xs text-neutral-500 mt-1">Qué buscan sin encontrar, qué te piden por WhatsApp y qué agotados quieren</span>
         </button>
       </div>
     </div>
 
     <div id="pantalla-demanda" class="hidden">
       <button id="boton-volver-modo-3" type="button" class="text-xs text-neutral-400 underline">← Cambiar modo</button>
-      <h1 class="text-xl font-semibold text-neutral-900 mt-2">Lo que buscan tus clientes</h1>
+      <h1 class="text-xl font-semibold text-neutral-900 mt-2">Lo que buscan y piden tus clientes</h1>
       <p id="demanda-estado" class="text-sm text-neutral-500 mt-1"></p>
 
       <h2 class="mt-6 font-semibold text-neutral-900">Buscaron y no encontraron</h2>
       <p class="text-xs text-neutral-500 mt-1">Oportunidades: súbelo si lo tienes en bodega, o considéralo para tu próxima compra.</p>
       <ol id="lista-sin-resultados" class="mt-3 space-y-1"></ol>
 
+      <h2 class="mt-8 font-semibold text-neutral-900">Lo más pedido por WhatsApp</h2>
+      <p class="text-xs text-neutral-500 mt-1">Productos en carritos enviados por WhatsApp (cuenta envíos, no ventas cerradas).</p>
+      <ol id="lista-mas-pedidos" class="mt-3 space-y-1"></ol>
+
+      <h2 class="mt-8 font-semibold text-neutral-900">Agotados que te piden</h2>
+      <p class="text-xs text-neutral-500 mt-1">Tocaron "Avísame cuando vuelva a llegar": candidatos para volver a surtir.</p>
+      <ol id="lista-avisame" class="mt-3 space-y-1"></ol>
+
       <h2 class="mt-8 font-semibold text-neutral-900">Lo más buscado</h2>
       <ol id="lista-mas-buscadas" class="mt-3 space-y-1"></ol>
+      <p class="mt-8 text-xs text-neutral-400">Datos anónimos de los últimos 6 meses.</p>
     </div>
 
     <div id="pantalla-departamento" class="hidden">
@@ -161,7 +170,7 @@ import Layout from '../layouts/Layout.astro';
 </style>
 
 <script>
-  import type { DepartamentoConConteo, ProductoParaAdmin, MetadatosBusqueda, ResumenBusquedas } from '../lib/tipos';
+  import type { DepartamentoConConteo, ProductoParaAdmin, MetadatosBusqueda, MetadatosProductoPedido, ResumenBusquedas } from '../lib/tipos';
 
   const CLAVE_STORAGE = 'hgshop-upload-pin';
   let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
@@ -185,6 +194,8 @@ import Layout from '../layouts/Layout.astro';
   const demandaEstado = document.getElementById('demanda-estado') as HTMLElement;
   const listaSinResultados = document.getElementById('lista-sin-resultados') as HTMLElement;
   const listaMasBuscadas = document.getElementById('lista-mas-buscadas') as HTMLElement;
+  const listaMasPedidos = document.getElementById('lista-mas-pedidos') as HTMLElement;
+  const listaAvisame = document.getElementById('lista-avisame') as HTMLElement;
   const botonVolverModo1 = document.getElementById('boton-volver-modo-1') as HTMLButtonElement;
   const botonVolverModo2 = document.getElementById('boton-volver-modo-2') as HTMLButtonElement;
 
@@ -333,11 +344,41 @@ import Layout from '../layouts/Layout.astro';
     terminos.forEach((t) => lista.appendChild(filaDemanda(t, mostrarSinResultados)));
   }
 
+  function filaProducto(producto: MetadatosProductoPedido): HTMLLIElement {
+    const fila = document.createElement('li');
+    fila.className = 'flex items-baseline justify-between gap-3 border-b border-neutral-100 py-2 text-sm';
+    const enlace = document.createElement('a');
+    enlace.className = 'text-neutral-900 underline break-words min-w-0';
+    enlace.href = `/productos/${encodeURIComponent(producto.s)}/`;
+    enlace.target = '_blank';
+    enlace.rel = 'noopener';
+    enlace.textContent = producto.t;
+    const datos = document.createElement('span');
+    datos.className = 'shrink-0 text-xs text-neutral-500 text-right';
+    datos.textContent = `${producto.n} ${producto.n === 1 ? 'vez' : 'veces'} · ${producto.ult}`;
+    fila.append(enlace, datos);
+    return fila;
+  }
+
+  function llenarListaProductos(lista: HTMLElement, productos: MetadatosProductoPedido[]) {
+    lista.innerHTML = '';
+    if (productos.length === 0) {
+      const vacio = document.createElement('li');
+      vacio.className = 'text-sm text-neutral-400';
+      vacio.textContent = 'Todavía no hay datos.';
+      lista.appendChild(vacio);
+      return;
+    }
+    productos.forEach((p) => lista.appendChild(filaProducto(p)));
+  }
+
   botonModoDemanda.addEventListener('click', async () => {
     mostrarPantalla(pantallaDemanda);
     demandaEstado.textContent = 'Cargando...';
     listaSinResultados.innerHTML = '';
     listaMasBuscadas.innerHTML = '';
+    listaMasPedidos.innerHTML = '';
+    listaAvisame.innerHTML = '';
     try {
       const respuesta = await fetch('/api/busquedas', { headers: headersConPin() });
       if (!respuesta.ok) throw new Error(`Error ${respuesta.status}`);
@@ -345,6 +386,8 @@ import Layout from '../layouts/Layout.astro';
       demandaEstado.textContent = `${resumen.total} término${resumen.total === 1 ? '' : 's'} distinto${resumen.total === 1 ? '' : 's'} en los últimos 6 meses.`;
       llenarLista(listaSinResultados, resumen.sinResultados, true);
       llenarLista(listaMasBuscadas, resumen.masBuscadas, false);
+      llenarListaProductos(listaMasPedidos, resumen.masPedidos || []);
+      llenarListaProductos(listaAvisame, resumen.avisame || []);
     } catch (error: any) {
       demandaEstado.textContent = `No se pudo cargar: ${error.message}`;
     }

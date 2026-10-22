@@ -43,6 +43,7 @@ const { numeroDefault } = Astro.props;
 
 <script>
   import { obtenerCarrito, quitarDelCarrito, construirEnvioCarrito } from '../lib/carrito';
+  import { registrarEvento } from '../lib/metricas';
 
   function renderizarCarrito() {
     const panel = document.getElementById('panel-carrito');
@@ -109,6 +110,9 @@ const { numeroDefault } = Astro.props;
       const numeroDefault = panel?.dataset.numeroDefault || '';
       const envio = construirEnvioCarrito(numeroDefault);
       if (!envio) return;
+
+      // 0. Contar (anónimo) qué productos se pidieron, antes de vaciar el carrito.
+      registrarEvento('pedido', obtenerCarrito().map((item) => ({ slug: item.slug, titulo: item.titulo })));
 
       // 1. Abrir WhatsApp
       const link = `https://wa.me/${envio.numero}?text=${encodeURIComponent(envio.mensaje)}`;

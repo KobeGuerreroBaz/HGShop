@@ -36,9 +36,19 @@ export interface MetadatosBusqueda {
   pag: string; // página donde se buscó la última vez
 }
 
+/** Lo que se guarda por producto pedido o con "avísame" (registrar-pedido.ts). */
+export interface MetadatosProductoPedido {
+  s: string; // slug
+  t: string; // título
+  n: number; // veces
+  ult: string; // fecha de la última vez (AAAA-MM-DD)
+}
+
 /** Forma que devuelve busquedas.ts y consume inventario.astro. */
 export interface ResumenBusquedas {
   total: number;
   masBuscadas: MetadatosBusqueda[];
   sinResultados: MetadatosBusqueda[];
+  masPedidos: MetadatosProductoPedido[];
+  avisame: MetadatosProductoPedido[];
 }

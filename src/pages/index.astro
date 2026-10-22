@@ -18,6 +18,7 @@ const categorias = await sanityClient.fetch(`
 const productos = await sanityClient.fetch(`
   *[_type == "producto" && defined(categoria)]{
     "slug": slug.current,
+    _createdAt,
     titulo,
     precio,
     descripcion,
@@ -65,6 +66,14 @@ const infoPorDepartamento = departamentos.map((depto) => {
     totalProductos: productosDelDepto.length,
   };
 });
+
+// "Recién llegados": los más nuevos que se pueden pedir (disponibles y con foto).
+// Es estático: se actualiza con cada deploy.
+const LIMITE_RECIEN_LLEGADOS = 8;
+const recienLlegados = productos
+  .filter((p: any) => p.slug && p.imagenPrincipal && !p.agotado)
+  .sort((a: any, b: any) => String(b._createdAt || '').localeCompare(String(a._createdAt || '')))
+  .slice(0, LIMITE_RECIEN_LLEGADOS);
 
 const datosOrganizacion = {
   '@context': 'https://schema.org/',
@@ -150,7 +159,7 @@ const imagenInicio = productoDestacadoInicio
     </div>
   </div>
 
-  <p class="px-6 pt-5 max-w-2xl mx-auto text-center text-base leading-relaxed text-neutral-600">
+  <p id="texto-como-pedir" class="px-6 pt-5 max-w-2xl mx-auto text-center text-base leading-relaxed text-neutral-600">
     Para pedir cualquier producto, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; en ningún momento se te solicitará ningún pago en este sitio.
   </p>
 
@@ -184,6 +193,28 @@ const imagenInicio = productoDestacadoInicio
         </a>
       ))}
     </div>
+
+    {recienLlegados.length > 0 && (
+      <section id="recien-llegados" class="mt-16" aria-labelledby="titulo-recien-llegados">
+        <h2 id="titulo-recien-llegados" class="text-xl sm:text-2xl font-semibold text-neutral-900 text-center">Recién llegados</h2>
+        <p class="mt-1 text-sm text-neutral-500 text-center">Lo más nuevo en el catálogo</p>
+        <div class="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
+          {recienLlegados.map((producto: any) => (
+            <ProductCard
+              slug={producto.slug}
+              titulo={producto.titulo}
+              precio={producto.precio}
+              imagenPrincipal={producto.imagenPrincipal}
+              descripcion={producto.descripcion}
+              altTexto={producto.altTexto}
+              edicion={producto.edicion}
+              numeroWhatsApp={numeroWhatsAppParaDepartamento(producto.categoriaDepartamento, configWhatsApp)}
+              agotado={producto.agotado}
+            />
+          ))}
+        </div>
+      </section>
+    )}
 
     <div id="resultados-busqueda" class="hidden">
       <p id="aviso-correccion" class="hidden text-sm text-neutral-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4"></p>
@@ -239,6 +270,8 @@ const imagenInicio = productoDestacadoInicio
   const terminoSinResultados = document.getElementById('termino-sin-resultados');
   const botonPreguntar = document.getElementById('boton-preguntar-whatsapp') as HTMLAnchorElement | null;
   const botonLimpiar = document.getElementById('boton-limpiar-busqueda');
+  const textoComoPedir = document.getElementById('texto-como-pedir');
+  const recienLlegados = document.getElementById('recien-llegados');
 
   const productos = productosDesdeDom('.producto-item');
   const registrador = crearRegistradorBusquedas('inicio');
@@ -250,6 +283,9 @@ const imagenInicio = productoDestacadoInicio
     if (tarjetasDepartamentos) {
       tarjetasDepartamentos.style.display = hayBusqueda ? 'none' : '';
     }
+    // Al buscar, los resultados van primero: se ocultan las instrucciones y lo nuevo.
+    if (textoComoPedir) textoComoPedir.style.display = hayBusqueda ? 'none' : '';
+    if (recienLlegados) recienLlegados.style.display = hayBusqueda ? 'none' : '';
     if (resultadosBusqueda) {
       resultadosBusqueda.classList.toggle('hidden', !hayBusqueda);
     }

@@ -211,7 +211,7 @@ const datosItemList = {
     </div>
   </div>
 
-  <p class="px-6 pt-5 max-w-2xl mx-auto text-center text-base leading-relaxed text-neutral-600">
+  <p id="texto-como-pedir" class="px-6 pt-5 max-w-2xl mx-auto text-center text-base leading-relaxed text-neutral-600">
     Para pedir cualquier producto, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; en ningún momento se te solicitará ningún pago en este sitio.
   </p>
 
@@ -369,6 +369,7 @@ const datosItemList = {
   const botonPreguntar = document.getElementById('boton-preguntar-whatsapp') as HTMLAnchorElement | null;
   const botonLimpiar = document.getElementById('boton-limpiar-busqueda');
   const filaChips = document.getElementById('fila-categorias');
+  const textoComoPedir = document.getElementById('texto-como-pedir');
   const contenedoresCategoria = Array.from(document.querySelectorAll<HTMLElement>('.categoria-contenedor'));
   let ultimaCantidad = 0;
 
@@ -387,6 +388,8 @@ const datosItemList = {
     const hayBusqueda = consulta !== '';
     estadoBusqueda?.classList.toggle('hidden', !hayBusqueda);
     if (filaChips) filaChips.style.display = hayBusqueda ? 'none' : '';
+    // Al buscar, los resultados van primero: se ocultan las instrucciones de pedido.
+    if (textoComoPedir) textoComoPedir.style.display = hayBusqueda ? 'none' : '';
 
     if (!hayBusqueda) {
       restaurarOrdenOriginal();

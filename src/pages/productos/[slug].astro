@@ -14,6 +14,8 @@ export async function getStaticPaths() {
     sanityClient.fetch(`
       *[_type == "producto" && defined(slug.current)]{
         "slug": slug.current,
+        _createdAt,
+        "categoriaId": categoria._ref,
         titulo,
         precio,
         estado,
@@ -48,14 +50,45 @@ export async function getStaticPaths() {
     return true;
   });
 
+  // "También te puede gustar": hasta 4 del mismo subdepartamento (y si no alcanzan,
+  // del mismo departamento). Solo disponibles y con foto; primero los que tienen
+  // precio y luego los más nuevos. Se calcula aquí, sin consultas extra a Sanity.
+  const LIMITE_RELACIONADOS = 4;
+  const candidatos = [...productosUnicos]
+    .filter((p: any) => !p.agotado && p.imagenPrincipal)
+    .sort(
+      (a: any, b: any) =>
+        Number(b.precio != null) - Number(a.precio != null) ||
+        String(b._createdAt || '').localeCompare(String(a._createdAt || ''))
+    );
+
+  function relacionadosDe(producto: any) {
+    const mismaCategoria = candidatos.filter(
+      (p: any) => p.slug !== producto.slug && p.categoriaId && p.categoriaId === producto.categoriaId
+    );
+    const mismoDepartamento = candidatos.filter(
+      (p: any) =>
+        p.slug !== producto.slug &&
+        p.categoriaId !== producto.categoriaId &&
+        p.categoriaDepartamento === producto.categoriaDepartamento
+    );
+    return [...mismaCategoria, ...mismoDepartamento].slice(0, LIMITE_RELACIONADOS).map((p: any) => ({
+      slug: p.slug,
+      titulo: p.titulo,
+      precio: p.precio,
+      altTexto: p.altTexto,
+      imagenPrincipal: p.imagenPrincipal,
+    }));
+  }
+
   return productosUnicos.map((producto: any) => ({
     params: { slug: producto.slug },
-    props: { producto, configWhatsApp, todosDepartamentos },
+    props: { producto, configWhatsApp, todosDepartamentos, relacionados: relacionadosDe(producto) },
   }));
 }
 
 const { slug } = Astro.params;
-const { producto, configWhatsApp, todosDepartamentos } = Astro.props as any;
+const { producto, configWhatsApp, todosDepartamentos, relacionados } = Astro.props as any;
 
 const textoAlt = producto.altTexto || producto.titulo;
 
@@ -75,6 +108,10 @@ const numeroWhatsApp = numeroWhatsAppParaDepartamento(producto.categoriaDepartam
 const nombreDepartamentoTexto = nombreDepartamento(producto.categoriaDepartamento, configWhatsApp);
 
 const linkProducto = `https://hgstoremx.com/productos/${slug}/`;
+
+const linkAvisame = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(
+  `Hola, me interesa "${producto.titulo}" que aparece agotado: ${linkProducto} ¿Me avisas cuando te vuelva a llegar?`
+)}`;
 
 const linkVolverRespaldo = `/catalogo/${producto.categoriaDepartamento}/`;
 
@@ -242,6 +279,17 @@ const datosBreadcrumb = {
           <div class="mt-8 w-full rounded-md bg-neutral-100 border border-neutral-200 px-6 py-3 text-center text-sm font-semibold text-neutral-500 tracking-wide">
             AGOTADO
           </div>
+          <a
+            id="boton-avisame"
+            href={linkAvisame}
+            target="_blank"
+            rel="noopener"
+            data-slug={slug}
+            data-titulo={producto.titulo}
+            class="mt-3 w-full inline-flex items-center justify-center rounded-md border border-neutral-900 bg-white px-6 py-3 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+          >
+            Avísame por WhatsApp cuando vuelva a llegar
+          </a>
         ) : (
           <>
             <div class="mt-8">
@@ -261,8 +309,46 @@ const datosBreadcrumb = {
             </p>
           </>
         )}
+
+        <button
+          id="boton-compartir"
+          type="button"
+          data-titulo={producto.titulo}
+          data-url={linkProducto}
+          class="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-md border border-neutral-200 px-6 py-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+        >
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          Compartir
+        </button>
       </div>
     </div>
+
+    {relacionados.length > 0 && (
+      <section class="mt-16" aria-labelledby="titulo-relacionados">
+        <h2 id="titulo-relacionados" class="text-lg font-semibold text-neutral-900 mb-4">También te puede gustar</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-8">
+          {relacionados.map((r: any) => (
+            <a href={`/productos/${r.slug}/`} class="block group">
+              <div class="aspect-square w-full overflow-hidden rounded-lg bg-neutral-50 border border-neutral-100">
+                <img
+                  src={urlFor(r.imagenPrincipal).width(400).auto('format').url()}
+                  alt={r.altTexto || r.titulo}
+                  loading="lazy"
+                  decoding="async"
+                  class="w-full h-full object-contain transition-transform group-hover:scale-105"
+                />
+              </div>
+              <h3 class="mt-3 text-sm font-medium text-neutral-900 line-clamp-2">{r.titulo}</h3>
+              {r.precio != null ? (
+                <p class="mt-1 text-base font-semibold text-neutral-900">${r.precio} MXN</p>
+              ) : (
+                <p class="mt-1 text-base font-semibold text-neutral-500">Consultar precio</p>
+              )}
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
   </main>
 
   <div id="lightbox" class="hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Foto ampliada">
@@ -352,6 +438,34 @@ const datosBreadcrumb = {
   }
 
   document.addEventListener('carrito-actualizado', actualizarBotonesCarrito);
+</script>
+
+<script>
+  import { registrarEvento } from '../../lib/metricas';
+
+  // "Compartir": en celular abre el menú nativo (WhatsApp, Messenger, etc.); si el
+  // navegador no lo soporta, abre WhatsApp con el link ya escrito.
+  const botonCompartir = document.getElementById('boton-compartir') as HTMLButtonElement | null;
+  botonCompartir?.addEventListener('click', async () => {
+    const titulo = botonCompartir.dataset.titulo || '';
+    const url = botonCompartir.dataset.url || window.location.href;
+    const texto = `Mira este producto en HG Store MX: ${titulo}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: titulo, text: texto, url });
+      } catch {
+        // El cliente canceló el menú de compartir: no hacer nada.
+      }
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${texto} ${url}`)}`, '_blank', 'noopener');
+  });
+
+  // "Avísame cuando vuelva a llegar": se cuenta (anónimo) para saber qué volver a surtir.
+  const botonAvisame = document.getElementById('boton-avisame') as HTMLAnchorElement | null;
+  botonAvisame?.addEventListener('click', () => {
+    registrarEvento('avisame', [{ slug: botonAvisame.dataset.slug || '', titulo: botonAvisame.dataset.titulo || '' }]);
+  });
 </script>
 
 <script>
