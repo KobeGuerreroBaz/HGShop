@@ -170,7 +170,8 @@ const datosItemList = {
     <div class="max-w-2xl mx-auto">
       <!--
         Campo de búsqueda pensado para celular (iPhone y Android):
-        - type/inputmode/enterkeyhint="search": teclado de búsqueda con tecla "Buscar".
+        - type="search" + enterkeyhint="search": teclado con tecla "Buscar".
+          OJO: NO usar inputmode="search": en iPhone fuerza la tecla azul "Ir" (flecha).
         - autocomplete/autocorrect/autocapitalize/spellcheck apagados: sin sugerencias de
           contactos, sin MAYÚSCULA inicial forzada y sin autocorrector cambiando nombres.
         - name="search": Safari ignora autocomplete="off" para "Autorrellenar contacto";
@@ -187,7 +188,6 @@ const datosItemList = {
           type="search"
           id="buscador"
           name="search"
-          inputmode="search"
           enterkeyhint="search"
           autocomplete="off"
           autocorrect="off"
