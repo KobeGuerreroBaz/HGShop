@@ -3,13 +3,27 @@
 // es JavaScript plano y usa fetch directo a la API REST (sin SDK).
 //
 // Flujo:
-// 1. Intenta en UNA llamada: foto + búsqueda de Google + respuesta JSON con esquema.
+// 1. Intenta en UNA llamada: foto + búsqueda de Google + respuesta JSON con esquema,
+//    con el modelo fijo y el nivel de pensamiento de abajo.
 // 2. Si eso falla (error de la API, JSON roto, la búsqueda no está disponible en tu
-//    plan, o tarda demasiado), repite automáticamente SIN búsqueda, como antes.
+//    plan, o tarda demasiado), repite automáticamente SIN búsqueda y con la
+//    configuración original (alias "latest", pensamiento por defecto).
 //    Así nunca se traba una subida.
 
-const MODELO = 'gemini-flash-lite-latest';
-const URL_API = `https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`;
+// Modelo fijo: no cambia solo cuando Google saca una versión nueva.
+// Para probar otro modelo, cámbialo aquí (ej. 'gemini-3.8-flash').
+const MODELO = 'gemini-3.5-flash-lite';
+
+// Cuánto "razona" antes de contestar: 'minimal' | 'low' | 'medium' | 'high'.
+// Más nivel = más cuidadoso, pero más lento y más caro. Pon null para usar el
+// valor por defecto del modelo.
+const NIVEL_PENSAMIENTO = 'low';
+
+// Plan B: la misma configuración que funcionaba antes de estos ajustes.
+const MODELO_RESPALDO = 'gemini-flash-lite-latest';
+
+const urlModelo = (modelo) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
 const TIEMPO_MAXIMO_CON_BUSQUEDA_MS = 30000;
 const TIEMPO_MAXIMO_SIN_BUSQUEDA_MS = 30000;
 const MAXIMO_FUENTES = 5;
@@ -165,9 +179,13 @@ async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqu
   };
   if (conBusqueda) {
     cuerpo.tools = [{ google_search: {} }];
+    if (NIVEL_PENSAMIENTO) {
+      cuerpo.generationConfig.thinkingConfig = { thinkingLevel: NIVEL_PENSAMIENTO };
+    }
   }
 
-  const respuesta = await fetch(URL_API, {
+  const modelo = conBusqueda ? MODELO : MODELO_RESPALDO;
+  const respuesta = await fetch(urlModelo(modelo), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(cuerpo),

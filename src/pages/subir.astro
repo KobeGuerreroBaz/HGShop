@@ -72,7 +72,11 @@ import Layout from '../layouts/Layout.astro';
           </div>
           <div>
             <label class="text-xs text-neutral-500">Descripción</label>
-            <textarea id="campo-descripcion" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" rows="6"></textarea>
+            <textarea id="campo-descripcion" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm resize-none overflow-hidden" rows="6"></textarea>
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Palabras clave (separadas por coma)</label>
+            <textarea id="campo-palabras-clave" rows="2" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm resize-none overflow-hidden"></textarea>
           </div>
           <div>
             <label class="text-xs text-neutral-500">Departamento</label>
@@ -142,6 +146,18 @@ import Layout from '../layouts/Layout.astro';
           <div>
             <label class="text-xs text-neutral-500">Marca</label>
             <input id="campo-marca" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div id="grupo-edicion" class="hidden">
+            <label class="text-xs text-neutral-500">Edición</label>
+            <input id="campo-edicion" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div id="grupo-capacidad" class="hidden">
+            <label class="text-xs text-neutral-500">Capacidad</label>
+            <input id="campo-capacidad" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div id="grupo-edad" class="hidden">
+            <label class="text-xs text-neutral-500">Edad recomendada</label>
+            <input id="campo-edad" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
           </div>
 
           <button id="boton-guardar" type="button" class="w-full bg-neutral-900 text-white rounded-md py-3 text-sm font-medium">
@@ -241,6 +257,12 @@ import Layout from '../layouts/Layout.astro';
   const campoPrecio = document.getElementById('campo-precio') as HTMLInputElement;
   const campoCantidad = document.getElementById('campo-cantidad') as HTMLInputElement;
   const campoMarca = document.getElementById('campo-marca') as HTMLInputElement;
+  const campoPalabrasClave = document.getElementById('campo-palabras-clave') as HTMLTextAreaElement;
+  const camposOpcionales = [
+    { clave: 'edicion', grupo: document.getElementById('grupo-edicion') as HTMLElement, campo: document.getElementById('campo-edicion') as HTMLInputElement },
+    { clave: 'capacidad', grupo: document.getElementById('grupo-capacidad') as HTMLElement, campo: document.getElementById('campo-capacidad') as HTMLInputElement },
+    { clave: 'edadRecomendada', grupo: document.getElementById('grupo-edad') as HTMLElement, campo: document.getElementById('campo-edad') as HTMLInputElement },
+  ];
   const botonGuardar = document.getElementById('boton-guardar') as HTMLButtonElement;
   const botonCancelar = document.getElementById('boton-cancelar') as HTMLButtonElement;
   const mensajeGuardado = document.getElementById('mensaje-guardado') as HTMLElement;
@@ -254,6 +276,50 @@ import Layout from '../layouts/Layout.astro';
   }
 
   campoContexto.addEventListener('input', () => ajustarAlturaTextarea(campoContexto));
+  campoDescripcion.addEventListener('input', () => ajustarAlturaTextarea(campoDescripcion));
+  campoPalabrasClave.addEventListener('input', () => ajustarAlturaTextarea(campoPalabrasClave));
+
+  // Recordar el último departamento/subdepartamento aunque se cierre la pestaña.
+  // (Mientras la página sigue abierta ya se conservan solos entre productos.)
+  const CLAVE_ULTIMA_SELECCION = 'hgshop-subir-ultima-seleccion';
+
+  function guardarUltimaSeleccion() {
+    try {
+      localStorage.setItem(
+        CLAVE_ULTIMA_SELECCION,
+        JSON.stringify({ departamento: campoDepartamento.value, categoria: campoCategoria.value })
+      );
+    } catch {
+      // Sin almacenamiento disponible: no pasa nada, solo no se recuerda.
+    }
+  }
+
+  function restaurarUltimaSeleccion() {
+    if (campoDepartamento.value) return;
+    try {
+      const guardado = JSON.parse(localStorage.getItem(CLAVE_ULTIMA_SELECCION) || 'null');
+      if (!guardado?.departamento) return;
+      const existeDepto = Array.from(campoDepartamento.options).some(
+        (o) => o.value === guardado.departamento && o.value !== VALOR_NUEVO_DEPARTAMENTO
+      );
+      if (!existeDepto) return;
+      campoDepartamento.value = guardado.departamento;
+      reconstruirSelectCategorias();
+      const existeCategoria = Array.from(campoCategoria.options).some(
+        (o) => o.value === guardado.categoria && o.value !== VALOR_NUEVA_CATEGORIA
+      );
+      if (existeCategoria) campoCategoria.value = guardado.categoria;
+    } catch {
+      // Dato guardado inválido o sin almacenamiento: se ignora.
+    }
+  }
+
+  function palabrasClaveDelCampo(): string[] {
+    return campoPalabrasClave.value
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p !== '');
+  }
 
   function reconstruirSelectCategorias() {
     const depto = campoDepartamento.value;
@@ -324,6 +390,7 @@ import Layout from '../layouts/Layout.astro';
     categorias = await respuesta.json();
     reconstruirSelectCategorias();
     reconstruirSelectDepartamentos();
+    restaurarUltimaSeleccion();
   }
 
   campoDepartamento.addEventListener('change', () => {
@@ -648,9 +715,18 @@ import Layout from '../layouts/Layout.astro';
       campoTitulo.value = datosExtraidos.titulo || '';
       campoDescripcion.value = datosExtraidos.descripcion || '';
       campoMarca.value = datosExtraidos.marca || '';
+      campoPalabrasClave.value = (datosExtraidos.palabrasClave || []).join(', ');
+      for (const opcional of camposOpcionales) {
+        const valor = datosExtraidos[opcional.clave] || '';
+        opcional.campo.value = valor;
+        opcional.grupo.classList.toggle('hidden', !valor);
+      }
       campoPrecio.value = '';
       campoCantidad.value = '';
       formulario.classList.remove('hidden');
+      // Se ajusta después de mostrar el formulario: oculto mide 0 de alto.
+      ajustarAlturaTextarea(campoDescripcion);
+      ajustarAlturaTextarea(campoPalabrasClave);
     } catch (error: any) {
       estadoAnalisis.textContent = `Ocurrió un error inesperado: ${error.message}. Intenta de nuevo.`;
     } finally {
@@ -680,15 +756,16 @@ import Layout from '../layouts/Layout.astro';
     });
     formData.append('titulo', campoTitulo.value);
     formData.append('descripcion', campoDescripcion.value);
-    formData.append('palabrasClave', JSON.stringify(datosExtraidos.palabrasClave || []));
+    formData.append('palabrasClave', JSON.stringify(palabrasClaveDelCampo()));
     formData.append('categoriaId', campoCategoria.value);
     formData.append('hash', hashPrincipal);
     if (campoPrecio.value) formData.append('precio', campoPrecio.value);
     if (campoCantidad.value) formData.append('cantidad', campoCantidad.value);
     if (campoMarca.value) formData.append('marca', campoMarca.value);
-    if (datosExtraidos.capacidad) formData.append('capacidad', datosExtraidos.capacidad);
-    if (datosExtraidos.edicion) formData.append('edicion', datosExtraidos.edicion);
-    if (datosExtraidos.edadRecomendada) formData.append('edadRecomendada', datosExtraidos.edadRecomendada);
+    for (const opcional of camposOpcionales) {
+      const valor = opcional.campo.value.trim();
+      if (valor) formData.append(opcional.clave, valor);
+    }
     if (datosExtraidos.altTexto) formData.append('altTexto', datosExtraidos.altTexto);
 
     const respuesta = await fetch('/api/crear-producto', {
@@ -702,6 +779,7 @@ import Layout from '../layouts/Layout.astro';
     botonGuardar.textContent = 'Guardar producto';
 
     if (resultado.ok) {
+      guardarUltimaSeleccion();
       mensajeGuardado.textContent = `Producto "${campoTitulo.value}" guardado con éxito.`;
       mensajeGuardado.classList.remove('hidden');
       reiniciarParaSiguienteProducto();
@@ -726,6 +804,13 @@ import Layout from '../layouts/Layout.astro';
     nuevaCategoriaForm.classList.add('hidden');
     cajaIdentificacion.classList.add('hidden');
     cajaIdentificacion.innerHTML = '';
+    campoPalabrasClave.value = '';
+    for (const opcional of camposOpcionales) {
+      opcional.campo.value = '';
+      opcional.grupo.classList.add('hidden');
+    }
+    campoDescripcion.style.height = '';
+    campoPalabrasClave.style.height = '';
     actualizarMiniaturas();
     tarjetaActual.classList.add('hidden');
     formulario.classList.add('hidden');

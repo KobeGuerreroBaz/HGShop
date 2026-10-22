@@ -6,42 +6,56 @@ import Footer from '../../components/Footer.astro';
 import BotonCarrito from '../../components/BotonCarrito.astro';
 import PanelCarrito from '../../components/PanelCarrito.astro';
 
+// Todo se trae UNA sola vez en getStaticPaths y se pasa a cada página como props.
+// Antes cada ficha hacía 3 consultas a Sanity por su cuenta (producto, WhatsApp y
+// departamentos): con 1,000+ productos eran 3,000+ consultas y el build tardaba minutos.
 export async function getStaticPaths() {
-  const productos = await sanityClient.fetch(`
-    *[_type == "producto" && defined(slug.current)]{
-      "slug": slug.current
-    }
-  `);
+  const [productos, configWhatsApp, todosDepartamentos] = await Promise.all([
+    sanityClient.fetch(`
+      *[_type == "producto" && defined(slug.current)]{
+        "slug": slug.current,
+        titulo,
+        precio,
+        estado,
+        descripcion,
+        altTexto,
+        imagenPrincipal,
+        galeria,
+        edicion,
+        capacidad,
+        marca,
+        edadRecomendada,
+        palabrasClave,
+        mostrarExistencias,
+        cantidadDisponible,
+        agotado,
+        "categoriaTitulo": categoria->titulo,
+        "categoriaDepartamento": categoria->departamento
+      }
+    `),
+    obtenerConfiguracionWhatsApp(),
+    // El menú hamburguesa lista todos los departamentos, así que hay que traerlos aquí también.
+    sanityClient.fetch(`
+      array::unique(*[_type == "categoria" && defined(departamento)].departamento)
+    `),
+  ]);
 
-  return productos.map((producto: any) => ({
+  // Si dos productos compartieran slug, se queda el primero (igual que antes con [0]).
+  const slugsVistos = new Set<string>();
+  const productosUnicos = productos.filter((producto: any) => {
+    if (slugsVistos.has(producto.slug)) return false;
+    slugsVistos.add(producto.slug);
+    return true;
+  });
+
+  return productosUnicos.map((producto: any) => ({
     params: { slug: producto.slug },
+    props: { producto, configWhatsApp, todosDepartamentos },
   }));
 }
 
 const { slug } = Astro.params;
-
-const producto = await sanityClient.fetch(
-  `*[_type == "producto" && slug.current == $slug][0]{
-    titulo,
-    precio,
-    estado,
-    descripcion,
-    altTexto,
-    imagenPrincipal,
-    galeria,
-    edicion,
-    capacidad,
-    marca,
-    edadRecomendada,
-    palabrasClave,
-    mostrarExistencias,
-    cantidadDisponible,
-    agotado,
-    "categoriaTitulo": categoria->titulo,
-    "categoriaDepartamento": categoria->departamento
-  }`,
-  { slug }
-);
+const { producto, configWhatsApp, todosDepartamentos } = Astro.props as any;
 
 const textoAlt = producto.altTexto || producto.titulo;
 
@@ -57,14 +71,8 @@ const descripcionMeta =
     ? `${descripcionBase.slice(0, LIMITE_META - 1).trimEnd()}…`
     : descripcionBase;
 
-const configWhatsApp = await obtenerConfiguracionWhatsApp();
 const numeroWhatsApp = numeroWhatsAppParaDepartamento(producto.categoriaDepartamento, configWhatsApp);
 const nombreDepartamentoTexto = nombreDepartamento(producto.categoriaDepartamento, configWhatsApp);
-
-// El menú hamburguesa lista todos los departamentos, así que hay que traerlos aquí también.
-const todosDepartamentos = await sanityClient.fetch(`
-  array::unique(*[_type == "categoria" && defined(departamento)].departamento)
-`);
 
 const linkProducto = `https://hgstoremx.com/productos/${slug}/`;
 
