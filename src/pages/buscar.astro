@@ -13,7 +13,8 @@ import { buscar, prepararTexto } from '../lib/buscador';
 // personas que abren el link son enviadas por el script de abajo a /?q=..., donde ven
 // el catálogo normal con la búsqueda ya hecha. El inicio sigue siendo una página fija.
 
-const consultaCruda = (Astro.url.searchParams.get('q') || '').trim().slice(0, 80);
+// 'search' es el nombre del campo del buscador (por si el navegador no corre JavaScript).
+const consultaCruda = (Astro.url.searchParams.get('q') || Astro.url.searchParams.get('search') || '').trim().slice(0, 80);
 const consulta = consultaCruda.toLowerCase();
 
 // Sin término de búsqueda no hay nada que compartir: mandar al inicio.
@@ -84,7 +85,8 @@ const urlResultados = `/?q=${encodeURIComponent(consultaCruda)}`;
     // Quien abre el link compartido pasa directo al catálogo con la búsqueda hecha.
     // replace() evita que el botón "atrás" regrese a esta página intermedia.
     (function () {
-      var q = new URLSearchParams(window.location.search).get('q');
+      var parametros = new URLSearchParams(window.location.search);
+      var q = parametros.get('q') || parametros.get('search');
       if (q) window.location.replace('/?q=' + encodeURIComponent(q));
     })();
   </script>

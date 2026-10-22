@@ -142,20 +142,27 @@ const imagenInicio = productoDestacadoInicio
           que el nombre diga "search" es lo que lo hace tratarlo como búsqueda.
         - text-base en celular (16px): Safari en iPhone no hace zoom al tocarlo.
       -->
-      <input
-        type="search"
-        id="buscador"
-        name="search"
-        inputmode="search"
-        enterkeyhint="search"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="none"
-        spellcheck="false"
-        aria-label="Buscar productos"
-        placeholder="Buscar producto, ej. biberón, Barbie, spa..."
-        class="w-full appearance-none rounded-full border border-neutral-200 px-6 py-3 text-base sm:text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
-      />
+      <!--
+        El <form> con action es lo que hace que el teclado del iPhone muestre "Buscar"
+        (sin formulario, Safari pone una flecha). Con JavaScript nunca se envía: la
+        búsqueda ya se aplica al escribir. Sin JavaScript, cae en /buscar?search=...
+      -->
+      <form id="form-buscador" action="/buscar" method="get" role="search">
+        <input
+          type="search"
+          id="buscador"
+          name="search"
+          inputmode="search"
+          enterkeyhint="search"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="none"
+          spellcheck="false"
+          aria-label="Buscar productos"
+          placeholder="Buscar producto, ej. biberón, Barbie, spa..."
+          class="w-full appearance-none rounded-full border border-neutral-200 px-6 py-3 text-base sm:text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+        />
+      </form>
     </div>
   </div>
 
@@ -339,6 +346,13 @@ const imagenInicio = productoDestacadoInicio
 
   // Tecla "Buscar"/Intro del teclado: la búsqueda ya se aplicó al escribir;
   // solo se cierra el teclado para que se vean los resultados.
+  // Tecla "Buscar" del iPhone (envía el formulario): no recargar, solo cerrar el teclado.
+  document.getElementById('form-buscador')?.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    input?.blur();
+    registrador.ahora(input?.value || '', ultimaCantidad);
+  });
+
   input?.addEventListener('keydown', (evento) => {
     if (evento.key === 'Enter') {
       evento.preventDefault();
