@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisar precios · HG Shop</title>
+<style>
+  :root {
+    --fondo: #f5f5f4; --tarjeta: #fff; --texto: #1c1917; --suave: #78716c; --borde: #e7e5e4;
+    --verde: #15803d; --verde-claro: #dcfce7; --rojo: #b91c1c; --rojo-claro: #fee2e2;
+    --ambar: #b45309; --ambar-claro: #fef3c7; --azul: #1d4ed8; --azul-claro: #dbeafe;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 -apple-system, system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
+  header { position: sticky; top: 0; z-index: 5; background: var(--tarjeta); border-bottom: 1px solid var(--borde); padding: 12px 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .resumen { color: var(--suave); font-size: 12px; }
+  .barra { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+  .filtro { border: 1px solid var(--borde); background: var(--tarjeta); border-radius: 999px; padding: 5px 11px; cursor: pointer; font-size: 13px; }
+  .filtro.activo { background: var(--texto); color: #fff; border-color: var(--texto); }
+  .filtro .n { opacity: .6; margin-left: 4px; }
+  input[type=search], input[type=number], select { border: 1px solid var(--borde); border-radius: 8px; padding: 6px 10px; font: inherit; background: #fff; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; padding: 14px; margin-bottom: 14px; display: grid; grid-template-columns: 230px 1fr; gap: 16px; }
+  .tarjeta.hecha { opacity: .65; }
+  @media (max-width: 760px) { .tarjeta { grid-template-columns: 1fr; } }
+  .mio img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fafaf9; border-radius: 10px; border: 1px solid var(--borde); cursor: zoom-in; }
+  .mio .titulo { font-weight: 600; margin-top: 8px; }
+  .mio .meta { color: var(--suave); font-size: 12px; margin-top: 2px; }
+  .precio-actual { font-size: 20px; font-weight: 700; margin-top: 6px; }
+  .sin-precio { color: var(--rojo); font-size: 15px; }
+  .chip { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; margin: 4px 4px 0 0; }
+  .chip.verde { background: var(--verde-claro); color: var(--verde); }
+  .chip.rojo { background: var(--rojo-claro); color: var(--rojo); }
+  .chip.ambar { background: var(--ambar-claro); color: var(--ambar); }
+  .chip.azul { background: var(--azul-claro); color: var(--azul); }
+  .chip.gris { background: var(--borde); color: var(--suave); }
+  .cand { border: 1px solid var(--borde); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+  .cand.confirmado { border-color: var(--verde); background: #f0fdf4; }
+  .cand-cab { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+  .cand-nombre { font-weight: 600; }
+  .cand-info { color: var(--suave); font-size: 12px; }
+  .botones { display: flex; gap: 6px; flex-wrap: wrap; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--borde); background: #fff; padding: 5px 10px; font-size: 13px; }
+  button.si { border-color: var(--verde); color: var(--verde); }
+  button.no { border-color: var(--rojo); color: var(--rojo); }
+  button.primario { background: var(--texto); color: #fff; border-color: var(--texto); padding: 8px 16px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .avist { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .av { display: flex; gap: 8px; align-items: center; border: 1px solid var(--borde); border-radius: 8px; padding: 4px 8px 4px 4px; background: #fff; font-size: 12px; }
+  .av img { width: 90px; height: 90px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
+  .av .sinfoto { width: 56px; height: 56px; border-radius: 6px; background: var(--fondo); display: grid; place-items: center; color: var(--suave); font-size: 10px; text-align: center; }
+  .av b { font-size: 14px; }
+  .av.confirmada { border-color: var(--verde); background: #f0fdf4; }
+  .av-botones { display: flex; gap: 4px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
+  .av-botones button { padding: 1px 7px; font-size: 12px; }
+  .av a { color: var(--azul); font-size: 12px; text-decoration: none; }
+  .av a:hover { text-decoration: underline; }
+  .ocultas { color: var(--suave); font-size: 12px; margin-top: 6px; }
+  .datos-tarjeta { color: var(--suave); font-size: 11px; }
+  .datos-tarjeta .num { color: var(--texto); font-size: 12px; }
+  .chip.oro { background: #fef9c3; color: #854d0e; font-weight: 600; }
+  .visor-barra a { color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 7px 12px; text-decoration: none; background: rgba(255,255,255,.12); }
+  .vacio { color: var(--suave); font-style: italic; padding: 8px 0; }
+  .acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--borde); }
+  .acciones input[type=number] { width: 110px; font-size: 16px; }
+  .buscar-otro { display: flex; gap: 6px; margin-top: 6px; }
+  .buscar-otro input { flex: 1; }
+  .resultados-busqueda { margin-top: 8px; }
+  #mas { display: block; margin: 0 auto 30px; }
+  #visor { position: fixed; inset: 0; background: #0c0a09; z-index: 20; }
+  #visor[hidden] { display: none; }
+  .visor-lienzo { position: absolute; inset: 0 0 64px 0; overflow: hidden; cursor: grab; touch-action: none; }
+  .visor-lienzo.arrastrando { cursor: grabbing; }
+  .visor-lienzo img { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; max-width: none; border-radius: 4px; }
+  .visor-barra { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; color: #fff; }
+  .visor-barra button { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); min-width: 40px; padding: 7px 12px; font-size: 15px; }
+  .visor-barra button:disabled { opacity: .3; }
+  .visor-pie { font-size: 15px; text-align: center; min-width: 200px; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .visor-sep { width: 16px; }
+  #aviso { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--texto); color: #fff; padding: 10px 18px; border-radius: 10px; display: none; z-index: 30; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Revisar precios</h1>
+  <div class="resumen" id="resumen">Cargando…</div>
+  <div class="barra" id="filtros"></div>
+  <div class="barra">
+    <input type="search" id="texto" placeholder="Buscar en mis productos…" style="flex:1;min-width:180px">
+    <select id="depto"><option value="">Todos los departamentos</option></select>
+  </div>
+</header>
+<main>
+  <div id="lista"></div>
+  <button id="mas" style="display:none">Mostrar más</button>
+</main>
+<div id="visor" hidden>
+  <div class="visor-lienzo"><img alt="" draggable="false"></div>
+  <div class="visor-barra">
+    <button data-v="prev" title="Anterior (←)">←</button>
+    <span class="visor-pie"></span>
+    <button data-v="next" title="Siguiente (→)">→</button>
+    <span class="visor-sep"></span>
+    <button data-v="menos" title="Alejar (−)">−</button>
+    <button data-v="mas" title="Acercar (+)">＋</button>
+    <button data-v="ajustar" title="Ver completa (0)">Ajustar</button>
+    <a data-v="facebook" target="_blank" rel="noopener" hidden>Facebook ↗</a>
+    <button data-v="cerrar" title="Cerrar (Esc)">✕</button>
+  </div>
+</div>
+<div id="aviso"></div>
+
+<script>
+const POR_PAGINA = 25;
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+let productos = [];
+let filtro = 'pendientes';
+let mostrados = POR_PAGINA;
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const dinero = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('es-MX'));
+const fecha = (f) => {
+  const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${Number(m[3])} ${MESES[Number(m[2]) - 1]}` : esc(f || '');
+};
+
+function aviso(texto, error = false) {
+  const el = $('#aviso');
+  el.textContent = texto;
+  el.style.background = error ? 'var(--rojo)' : 'var(--texto)';
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => (el.style.display = 'none'), 2600);
+}
+
+async function api(ruta, cuerpo) {
+  const r = await fetch(ruta, cuerpo ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) } : undefined);
+  const datos = await r.json();
+  if (!r.ok) throw new Error(datos.error || 'Error');
+  return datos;
+}
+
+// Referencia para comparar: las coincidencias confirmadas, o la mejor si tiene 70% o más
+function referencia(p) {
+  const fotosSi = p.candidatos.flatMap((c) => c.avistamientos.filter((a) => a.fotoConfirmada));
+  const mismoNum = p.candidatos.flatMap((c) => c.avistamientos.filter((a) => a.mismoNumero));
+  if (!fotosSi.length && mismoNum.length) {
+    const pr = mismoNum.map((a) => a.precio);
+    return { min: Math.min(...pr), max: Math.max(...pr) };
+  }
+  const conf = p.candidatos.filter((c) => c.confirmado);
+  const usar = conf.length ? conf : p.candidatos.filter((c) => c.score >= 70).slice(0, 1);
+  const precios = fotosSi.length ? fotosSi.map((a) => a.precio) : usar.flatMap((c) => c.avistamientos.map((a) => a.precio));
+  if (!precios.length) return null;
+  return { min: Math.min(...precios), max: Math.max(...precios) };
+}
+
+function clasificar(p) {
+  const ref = referencia(p);
+  return {
+    sinPrecio: !p.precio,
+    sinCoincidencia: !p.candidatos.length,
+    debajo: !!(p.precio && ref && p.precio < ref.min),
+    arriba: !!(p.precio && ref && p.precio > ref.max),
+    revisado: !!p.estado,
+    cotizado: (p.cotizado || []).length > 0,
+  };
+}
+
+const FILTROS = [
+  ['pendientes', 'Pendientes', (c) => !c.revisado],
+  ['sinPrecio', 'Sin precio', (c) => c.sinPrecio && !c.revisado],
+  ['debajo', 'Mi precio debajo de la base', (c) => c.debajo && !c.revisado],
+  ['arriba', 'Mi precio arriba de la base', (c) => c.arriba && !c.revisado],
+  ['sinCoincidencia', 'Sin coincidencia', (c) => c.sinCoincidencia && !c.revisado],
+  ['cotizados', '⭐ Cotizados', (c) => c.cotizado && !c.revisado],
+  ['revisados', 'Ya revisados', (c) => c.revisado],
+  ['todos', 'Todos', () => true],
+];
+
+function visibles() {
+  const fn = FILTROS.find((f) => f[0] === filtro)[2];
+  const texto = $('#texto').value.trim().toLowerCase();
+  const depto = $('#depto').value;
+  return productos
+    .filter((p) => fn(clasificar(p)))
+    .filter((p) => !texto || p.titulo.toLowerCase().includes(texto))
+    .filter((p) => !depto || p.departamento === depto)
+    .sort((a, b) => {
+      const ca = clasificar(a), cb = clasificar(b);
+      if (ca.sinPrecio !== cb.sinPrecio) return ca.sinPrecio ? -1 : 1;
+      return (b.candidatos[0]?.score || 0) - (a.candidatos[0]?.score || 0);
+    });
+}
+
+function pintarFiltros() {
+  const clas = productos.map(clasificar);
+  $('#filtros').innerHTML = FILTROS.map(([id, nombre, fn]) =>
+    `<button class="filtro ${id === filtro ? 'activo' : ''}" data-f="${id}">${nombre}<span class="n">${clas.filter(fn).length}</span></button>`
+  ).join('');
+}
+
+function htmlAvistamiento(a, c) {
+  const img = a.tieneFoto
+    ? `<img src="/foto/${a.i}" loading="lazy" alt="" data-foto="${a.i}" data-url="${esc(a.url || '')}" data-pie="${esc(`${a.vendedor} · ${fecha(a.fecha)} · ${a.posiciones ? 'posición ' + a.posiciones + ' · ' : ''}${dinero(a.precio)}`)}">`
+    : `<div class="sinfoto">sin foto</div>`;
+  const datos = `data-key="${esc(c.key)}" data-clave="${esc(a.clave)}" data-score="${c.score}"`;
+  const botones = a.fotoConfirmada
+    ? `<span class="chip verde">es este</span><button data-accion="foto-quitar" ${datos} title="Quitar confirmación">↺</button>`
+    : `<button class="si" data-accion="foto-si" ${datos} title="Esta foto sí es mi carrito">✓</button><button class="no" data-accion="foto-no" ${datos} title="Esta foto no es mi carrito (se oculta)">✗</button>`;
+  const link = a.url ? ` <a href="${esc(a.url)}" target="_blank" rel="noopener">Facebook ↗</a>` : '';
+  const datosTarjeta = [a.numero ? `<b class="num">${esc(a.numero)}</b>` : '', a.serie ? esc(a.serie) : ''].filter(Boolean).join(' · ');
+  const marcas = [
+    a.mismoNumero ? '<span class="chip verde">✓ mismo número</span>' : '',
+    a.otroNumero ? '<span class="chip ambar">otro número</span>' : '',
+    a.especial ? '<span class="chip oro">★ especial</span>' : '',
+  ].join('');
+  const extra = [
+    a.posiciones ? `pos. ${esc(a.posiciones)}` : '',
+    a.cantidad > 1 ? `${a.cantidad} pzas` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div class="av ${a.fotoConfirmada ? 'confirmada' : ''}">${img}<div><b>${dinero(a.precio)}</b><br>${esc(a.vendedor)} · ${fecha(a.fecha)}${extra ? '<br>' + extra : ''}${datosTarjeta ? '<br><span class="datos-tarjeta">' + datosTarjeta + '</span>' : ''}${marcas ? '<br>' + marcas : ''}${a.dudoso ? ' <span class="chip ambar" title="' + esc(a.notas) + '">dudoso</span>' : ''}<div class="av-botones">${botones}${link}</div></div></div>`;
+}
+
+function htmlCandidato(c, desdeBusqueda = false) {
+  const rango = c.min === c.max ? dinero(c.min) : `${dinero(c.min)} – ${dinero(c.max)}`;
+  const botones = c.confirmado
+    ? `<button data-accion="quitar" data-key="${esc(c.key)}">Quitar confirmación</button>`
+    : `<button class="si" data-accion="confirmar" data-key="${esc(c.key)}" data-score="${desdeBusqueda ? '' : c.score}">✓ Es este</button>${desdeBusqueda ? '' : `<button class="no" data-accion="rechazar" data-key="${esc(c.key)}" data-score="${c.score}">✗ No es</button>`}`;
+  return `<div class="cand ${c.confirmado ? 'confirmado' : ''}">
+    <div class="cand-cab">
+      <div>
+        <div class="cand-nombre">${esc(c.nombre)} <span class="chip gris">${esc(c.marca)}</span>
+          ${c.confirmado ? '<span class="chip verde">confirmado</span>' : `<span class="chip ${c.score >= 80 ? 'verde' : c.score >= 60 ? 'azul' : 'ambar'}">${c.score}% parecido</span>`}
+          ${c.mismoNumero ? '<span class="chip verde">✓ mismo número</span>' : c.otroNumero ? '<span class="chip ambar">otro número</span>' : ''}
+          ${c.mismaSerie ? '<span class="chip azul">misma serie</span>' : ''}</div>
+        <div class="cand-info">${rango} · visto ${c.veces} ${c.veces === 1 ? 'vez' : 'veces'} · ${c.vendedores.map(esc).join(', ')}</div>
+      </div>
+      <div class="botones">${botones}</div>
+    </div>
+    <div class="avist">${c.avistamientos.map((a) => htmlAvistamiento(a, c)).join('')}</div>
+    ${c.ocultas ? `<div class="ocultas">${c.ocultas} foto(s) que marcaste como "no es" están ocultas.</div>` : ''}
+  </div>`;
+}
+
+function htmlTarjeta(p) {
+  const c = clasificar(p);
+  const chips = [
+    c.sinPrecio ? '<span class="chip rojo">sin precio</span>' : '',
+    c.debajo ? '<span class="chip ambar">debajo de la base</span>' : '',
+    c.arriba ? '<span class="chip azul">arriba de la base</span>' : '',
+    p.estado?.estado === 'guardado' ? `<span class="chip verde">guardado ${p.estado.precioAnterior != null ? 'antes ' + dinero(p.estado.precioAnterior) : ''}</span>` : '',
+    p.estado?.estado === 'saltado' ? '<span class="chip gris">saltado</span>' : '',
+    p.agotado ? '<span class="chip gris">agotado</span>' : '',
+    ...(p.cotizado || []).map((x) => `<span class="chip oro">⭐ ${esc(x)}</span>`),
+  ].join('');
+  const img = p.imagen ? `${p.imagen}?w=500&fit=max` : '';
+  return `<article class="tarjeta ${c.revisado ? 'hecha' : ''}" data-id="${esc(p._id)}">
+    <div class="mio">
+      ${img ? `<img src="${esc(img)}" loading="lazy" alt="" data-grande="${esc(p.imagen)}" data-pie="${esc(p.titulo)}">` : '<div class="vacio">sin foto</div>'}
+      <div class="titulo">${esc(p.titulo)}</div>
+      <div class="meta">${esc(p.categoria || p.departamento)}${p.cantidadDisponible != null ? ' · stock ' + p.cantidadDisponible : ''}${p.numero ? ' · número <b>' + esc(p.numero) + '</b>' : ''}</div>
+      <div class="precio-actual">${p.precio ? dinero(p.precio) : '<span class="sin-precio">SIN PRECIO</span>'}</div>
+      <div>${chips}</div>
+    </div>
+    <div>
+      ${p.candidatos.length ? p.candidatos.map((x) => htmlCandidato(x)).join('') : '<div class="vacio">No encontré este carrito en la base. Prueba con otro nombre:</div>'}
+      <div class="buscar-otro">
+        <input type="search" placeholder="Buscar otro nombre en la base…" data-buscar>
+        <button data-accion="buscar">Buscar</button>
+      </div>
+      <div class="resultados-busqueda"></div>
+      <div class="acciones">
+        <input type="number" min="1" step="1" placeholder="Precio" value="${p.precio ?? ''}" data-precio>
+        <button class="primario" data-accion="guardar">Guardar precio</button>
+        ${c.revisado ? '<button data-accion="pendiente">Marcar pendiente</button>' : '<button data-accion="saltar">Saltar</button>'}
+      </div>
+    </div>
+  </article>`;
+}
+
+function pintar() {
+  pintarFiltros();
+  const lista = visibles();
+  $('#lista').innerHTML = lista.length ? lista.slice(0, mostrados).map(htmlTarjeta).join('') : '<div class="vacio">Nada en este filtro.</div>';
+  $('#mas').style.display = lista.length > mostrados ? 'block' : 'none';
+  $('#mas').textContent = `Mostrar más (${lista.length - mostrados} restantes)`;
+}
+
+function reemplazarTarjeta(p) {
+  const i = productos.findIndex((x) => x._id === p._id);
+  productos[i] = p;
+  const vieja = document.querySelector(`.tarjeta[data-id="${CSS.escape(p._id)}"]`);
+  if (vieja) vieja.outerHTML = htmlTarjeta(p);
+  pintarFiltros();
+}
+
+// ---------- visor de fotos (acercar, mover y pasar entre fotos) ----------
+const visor = (() => {
+  const raiz = $('#visor');
+  const lienzo = $('.visor-lienzo', raiz);
+  const img = $('img', lienzo);
+  const pie = $('.visor-pie', raiz);
+  let fotos = [], idx = 0;
+  let base = { w: 0, h: 0 }, s = 1, tx = 0, ty = 0;
+  const MIN = 1, MAX = 8;
+
+  function aplicar() {
+    img.style.width = base.w + 'px';
+    img.style.height = base.h + 'px';
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+  }
+  function limitar() {
+    const W = lienzo.clientWidth, H = lienzo.clientHeight;
+    const w = base.w * s, h = base.h * s;
+    tx = w <= W ? (W - w) / 2 : Math.min(0, Math.max(W - w, tx));
+    ty = h <= H ? (H - h) / 2 : Math.min(0, Math.max(H - h, ty));
+  }
+  function ajustar() {
+    const W = lienzo.clientWidth, H = lienzo.clientHeight;
+    const nw = img.naturalWidth || 1, nh = img.naturalHeight || 1;
+    const f = Math.min(W / nw, H / nh); // llena la pantalla aunque la foto sea chica
+    base = { w: nw * f, h: nh * f };
+    s = 1;
+    limitar();
+    aplicar();
+  }
+  function zoomEn(nuevo, px, py) {
+    nuevo = Math.min(MAX, Math.max(MIN, nuevo));
+    tx = px - (px - tx) * (nuevo / s);
+    ty = py - (py - ty) * (nuevo / s);
+    s = nuevo;
+    limitar();
+    aplicar();
+  }
+  const centro = () => [lienzo.clientWidth / 2, lienzo.clientHeight / 2];
+  function mostrar(i) {
+    idx = (i + fotos.length) % fotos.length;
+    const f = fotos[idx];
+    pie.textContent = f.pie + (fotos.length > 1 ? `  (${idx + 1} de ${fotos.length})` : '');
+    const fb = $('[data-v=facebook]', raiz);
+    fb.hidden = !f.url;
+    if (f.url) fb.href = f.url;
+    $('[data-v=prev]', raiz).disabled = $('[data-v=next]', raiz).disabled = fotos.length < 2;
+    img.style.visibility = 'hidden';
+    img.onload = () => { ajustar(); img.style.visibility = 'visible'; };
+    img.src = f.src;
+  }
+  function abrir(lista, i) {
+    fotos = lista;
+    raiz.hidden = false;
+    document.body.style.overflow = 'hidden';
+    mostrar(Math.max(0, i));
+  }
+  function cerrar() {
+    raiz.hidden = true;
+    document.body.style.overflow = '';
+    img.removeAttribute('src');
+  }
+
+  // rueda del mouse / pellizco en trackpad
+  lienzo.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = lienzo.getBoundingClientRect();
+    const k = e.ctrlKey ? 0.01 : 0.0025;
+    zoomEn(s * Math.exp(-e.deltaY * k), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+
+  // arrastrar para moverse; clic en el fondo (sin arrastrar) cierra
+  let arrastre = null;
+  lienzo.addEventListener('pointerdown', (e) => {
+    arrastre = { x: e.clientX, y: e.clientY, tx, ty, movio: false, enFoto: e.target === img };
+    lienzo.setPointerCapture(e.pointerId);
+    lienzo.classList.add('arrastrando');
+  });
+  lienzo.addEventListener('pointermove', (e) => {
+    if (!arrastre) return;
+    const dx = e.clientX - arrastre.x, dy = e.clientY - arrastre.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) arrastre.movio = true;
+    tx = arrastre.tx + dx;
+    ty = arrastre.ty + dy;
+    limitar();
+    aplicar();
+  });
+  lienzo.addEventListener('pointerup', () => {
+    if (arrastre && !arrastre.movio && !arrastre.enFoto) cerrar();
+    arrastre = null;
+    lienzo.classList.remove('arrastrando');
+  });
+  lienzo.addEventListener('dblclick', (e) => {
+    const r = lienzo.getBoundingClientRect();
+    if (s > 1.05) ajustar();
+    else zoomEn(2.5, e.clientX - r.left, e.clientY - r.top);
+  });
+
+  $('.visor-barra', raiz).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-v]');
+    if (!b) return;
+    const v = b.dataset.v;
+    if (v === 'prev') mostrar(idx - 1);
+    if (v === 'next') mostrar(idx + 1);
+    if (v === 'mas') zoomEn(s * 1.5, ...centro());
+    if (v === 'menos') zoomEn(s / 1.5, ...centro());
+    if (v === 'ajustar') ajustar();
+    if (v === 'cerrar') cerrar();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (raiz.hidden) return;
+    if (e.key === 'Escape') cerrar();
+    else if (e.key === 'ArrowLeft') mostrar(idx - 1);
+    else if (e.key === 'ArrowRight') mostrar(idx + 1);
+    else if (e.key === '+' || e.key === '=') zoomEn(s * 1.5, ...centro());
+    else if (e.key === '-') zoomEn(s / 1.5, ...centro());
+    else if (e.key === '0') ajustar();
+    else return;
+    e.preventDefault();
+  });
+  window.addEventListener('resize', () => { if (!raiz.hidden) ajustar(); });
+
+  return { abrir };
+})();
+
+// ---------- eventos ----------
+$('#filtros').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-f]');
+  if (!b) return;
+  filtro = b.dataset.f;
+  mostrados = POR_PAGINA;
+  pintar();
+  window.scrollTo(0, 0);
+});
+$('#texto').addEventListener('input', () => { mostrados = POR_PAGINA; pintar(); });
+$('#depto').addEventListener('change', () => { mostrados = POR_PAGINA; pintar(); });
+$('#mas').addEventListener('click', () => { mostrados += POR_PAGINA; pintar(); });
+
+
+$('#lista').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const t = e.target.closest('.tarjeta');
+  if (e.target.matches('[data-buscar]')) $('[data-accion="buscar"]', t).click();
+  if (e.target.matches('[data-precio]')) $('[data-accion="guardar"]', t).click();
+});
+
+$('#lista').addEventListener('click', async (e) => {
+  const foto = e.target.closest('img[data-foto], img[data-grande]');
+  if (foto) {
+    // Galería: todas las fotos de la misma coincidencia (o solo tu foto)
+    const grupo = foto.closest('.cand') || foto.closest('.mio');
+    const imgs = [...grupo.querySelectorAll('img[data-foto], img[data-grande]')];
+    visor.abrir(
+      imgs.map((im) => ({
+        src: im.dataset.foto ? `/foto/${im.dataset.foto}` : `${im.dataset.grande}?w=1800&fit=max`,
+        pie: im.dataset.pie || '',
+        url: im.dataset.url || '',
+      })),
+      imgs.indexOf(foto)
+    );
+    return;
+  }
+  const b = e.target.closest('button[data-accion]');
+  if (!b) return;
+  const tarjeta = b.closest('.tarjeta');
+  const id = tarjeta.dataset.id;
+  const p = productos.find((x) => x._id === id);
+  const accion = b.dataset.accion;
+  b.disabled = true;
+  try {
+    const score = b.dataset.score ? Number(b.dataset.score) : null;
+    if (accion === 'confirmar' || accion === 'rechazar' || accion === 'quitar') {
+      const r = await api('/api/equivalencia', { id, key: b.dataset.key, accion, score });
+      reemplazarTarjeta(r.producto);
+      if (accion === 'confirmar') aviso('Coincidencia confirmada');
+    } else if (accion === 'foto-si' || accion === 'foto-no' || accion === 'foto-quitar') {
+      const r = await api('/api/foto', { id, key: b.dataset.key, clave: b.dataset.clave, accion: accion.slice(5), score });
+      reemplazarTarjeta(r.producto);
+      if (accion === 'foto-no') aviso('Foto oculta para este carrito');
+    } else if (accion === 'buscar') {
+      const q = $('[data-buscar]', tarjeta).value.trim();
+      if (!q) return;
+      const r = await api(`/api/buscar?q=${encodeURIComponent(q)}&id=${encodeURIComponent(id)}`);
+      $('.resultados-busqueda', tarjeta).innerHTML = r.candidatos.length
+        ? r.candidatos.map((c) => htmlCandidato(c, true)).join('')
+        : '<div class="vacio">Sin resultados en la base.</div>';
+    } else if (accion === 'guardar') {
+      const valor = Number($('[data-precio]', tarjeta).value);
+      if (!valor || valor <= 0) { aviso('Escribe un precio válido', true); return; }
+      const antes = p.precio;
+      if (antes === valor && !confirm(`El precio ya es ${dinero(valor)}. ¿Marcarlo como revisado?`)) return;
+      const r = await api('/api/precio', { id, precio: valor });
+      reemplazarTarjeta(r.producto);
+      aviso(`Guardado: ${dinero(valor)} (haz deploy para verlo en el sitio)`);
+    } else if (accion === 'saltar' || accion === 'pendiente') {
+      const r = await api('/api/estado', { id, valor: accion === 'saltar' ? 'saltado' : null });
+      reemplazarTarjeta(r.producto);
+    }
+  } catch (err) {
+    aviso(err.message, true);
+  } finally {
+    b.disabled = false;
+  }
+});
+
+// ---------- inicio ----------
+(async () => {
+  try {
+    const d = await api('/api/datos');
+    productos = d.productos;
+    const sinPrecio = productos.filter((p) => !p.precio).length;
+    $('#resumen').textContent = `${productos.length} productos (${sinPrecio} sin precio) · base: ${d.base.precios} precios de ${d.base.modelos} modelos · vendedores: ${d.vendedores.join(', ')}${d.aprendidos ? ` · ${d.aprendidos} palabras aprendidas` : ''}`;
+    const deptos = [...new Set(productos.map((p) => p.departamento))].sort();
+    $('#depto').innerHTML += deptos.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    pintar();
+  } catch (err) {
+    $('#resumen').textContent = 'Error al cargar: ' + err.message;
+  }
+})();
+</script>
+</body>
+</html>

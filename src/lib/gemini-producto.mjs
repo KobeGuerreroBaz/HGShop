@@ -173,20 +173,33 @@ function extraerFuentes(candidato) {
   return fuentes;
 }
 
+// IMPORTANTE (comprobado el 22 oct 2026): con la búsqueda de Google activa NO se usa
+// responseJsonSchema. Con el esquema, Gemini deja de buscar (0 búsquedas, 0 fuentes) y
+// contesta de memoria. Por eso, en las llamadas con búsqueda se pide el JSON en el prompt
+// y se deja solo responseMimeType; el código ya valida y tolera la respuesta.
+const textoEsquema = (esquema) =>
+  `\n\nFORMATO DE RESPUESTA: devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin bloque de código) que cumpla este esquema JSON:\n${JSON.stringify(esquema)}`;
+
+class BusquedaNoRealizada extends Error {}
+
+/** true si Google realmente buscó (hay consultas de búsqueda o fuentes). */
+const huboBusqueda = (candidato, fuentes) =>
+  (candidato?.groundingMetadata?.webSearchQueries?.length || 0) > 0 || fuentes.length > 0;
+
 async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqueda }) {
   const cuerpo = {
     contents: [
       {
         role: 'user',
         parts: [
-          { text: construirPrompt(contexto, conBusqueda) },
+          { text: construirPrompt(contexto, conBusqueda) + (conBusqueda ? textoEsquema(ESQUEMA_RESPUESTA) : '') },
           { inline_data: { mime_type: mimeType, data: imagenBase64 } },
         ],
       },
     ],
     generationConfig: {
       responseMimeType: 'application/json',
-      responseJsonSchema: ESQUEMA_RESPUESTA,
+      ...(conBusqueda ? {} : { responseJsonSchema: ESQUEMA_RESPUESTA }),
     },
   };
   if (conBusqueda) {
@@ -216,7 +229,13 @@ async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqu
     throw new Error('Gemini devolvio una respuesta incompleta o con JSON roto');
   }
 
-  return { datos, fuentes: conBusqueda ? extraerFuentes(candidato) : [] };
+  const fuentes = conBusqueda ? extraerFuentes(candidato) : [];
+  // Si pidió búsqueda y Gemini no buscó, el resultado vino de memoria: se descarta y
+  // analizarProducto cae al plan B (solo foto, confianza baja) en vez de fingir verificación.
+  if (conBusqueda && !huboBusqueda(candidato, fuentes)) {
+    throw new BusquedaNoRealizada('Gemini no hizo la busqueda en internet');
+  }
+  return { datos, fuentes };
 }
 
 function normalizar(datos, fuentes, busquedaUsada) {
@@ -419,16 +438,40 @@ export async function obtenerTipoCambioUsdMxn() {
  * @returns {Promise<object>} referencia limpia (ver limpiarReferenciaPrecio) lista para mostrar y guardar.
  */
 export async function buscarReferenciaPrecio({ apiKey, flujo, producto }) {
+  // Si Gemini no busca en internet, un precio sería inventado: se reintenta una vez y, si
+  // sigue sin buscar, se devuelve la referencia vacía y avisando, nunca precios sin verificar.
+  try {
+    return await buscarReferenciaPrecioUnaVez({ apiKey, flujo, producto });
+  } catch (error) {
+    if (!(error instanceof BusquedaNoRealizada)) throw error;
+  }
+  try {
+    return await buscarReferenciaPrecioUnaVez({ apiKey, flujo, producto });
+  } catch (error) {
+    if (!(error instanceof BusquedaNoRealizada)) throw error;
+    return limpiarReferenciaPrecio({
+      fecha: new Date().toISOString().slice(0, 10),
+      flujo,
+      productoBuscado: producto.productoIdentificado || producto.titulo,
+      alertaValor: null,
+      tipoCambio: null,
+      nota: 'La búsqueda en internet no se realizó; no se muestran precios sin verificar. Vuelve a intentar.',
+      precios: [],
+      fuentes: [],
+    });
+  }
+}
+
+async function buscarReferenciaPrecioUnaVez({ apiKey, flujo, producto }) {
   if (!apiKey) throw new Error('Falta GEMINI_API_KEY');
   if (!esFlujoValido(flujo)) throw new Error('Este tipo de producto no usa búsqueda de precio');
   if (!producto?.titulo && !producto?.productoIdentificado) throw new Error('Falta el nombre del producto');
 
   const cuerpo = {
-    contents: [{ role: 'user', parts: [{ text: construirPromptPrecio(flujo, producto) }] }],
+    contents: [{ role: 'user', parts: [{ text: construirPromptPrecio(flujo, producto) + textoEsquema(ESQUEMA_PRECIO) }] }],
     tools: [{ google_search: {} }],
     generationConfig: {
       responseMimeType: 'application/json',
-      responseJsonSchema: ESQUEMA_PRECIO,
       ...(NIVEL_PENSAMIENTO ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}),
     },
   };
@@ -454,6 +497,7 @@ export async function buscarReferenciaPrecio({ apiKey, flujo, producto }) {
   }
 
   const fuentes = extraerFuentes(candidato);
+  if (!huboBusqueda(candidato, fuentes)) throw new BusquedaNoRealizada('Gemini no hizo la busqueda en internet');
   const precios = asignarLinks(datos.precios, fuentes).map((p) => ({
     ...p,
     mxn: p.moneda === 'USD' && tipoCambio ? Math.round(Number(p.precio) * tipoCambio) : null,
