@@ -24,31 +24,6 @@ export interface ProductoParaAdmin {
   categoriaId?: string;
   departamento?: string;
   imagenUrl: string | null;
-  /** Referencia de precio guardada (ver flujos-precio.mjs); null si no hay. */
-  referenciaPrecio?: ReferenciaPrecio | null;
-}
-
-export interface PrecioEncontrado {
-  tienda: string;
-  dominio?: string;
-  tipo: 'tienda' | 'vendido' | 'precio-mercado' | 'reventa';
-  precio: number;
-  moneda: 'MXN' | 'USD';
-  mxn?: number | null;
-  url?: string | null;
-  detalle?: string | null;
-}
-
-/** Lo que devuelve /api/referencia-precio y se guarda en producto.referenciaPrecio. */
-export interface ReferenciaPrecio {
-  fecha: string;
-  flujo: 'autos-escala' | 'juguete' | 'pokemon';
-  productoBuscado?: string;
-  alertaValor?: string | null;
-  tipoCambio?: number | null;
-  nota?: string | null;
-  precios: PrecioEncontrado[];
-  fuentes?: { titulo: string; url: string }[];
 }
 
 /** Lo que se guarda por cada término buscado en el catálogo (registrar-busqueda.ts). */

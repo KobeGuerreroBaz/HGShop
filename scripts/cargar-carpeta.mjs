@@ -6,8 +6,7 @@ import readline from 'readline';
 import sharp from 'sharp';
 import { exec } from 'child_process';
 import { createClient } from '@sanity/client';
-import { analizarProducto, buscarReferenciaPrecio } from '../src/lib/gemini-producto.mjs';
-import { flujoParaDepartamento } from '../src/lib/flujos-precio.mjs';
+import { analizarProducto } from '../src/lib/gemini-producto.mjs';
 
 const client = createClient({
   projectId: process.env.SANITY_PROJECT_ID,
@@ -35,36 +34,6 @@ function mostrarIdentificacion(datos) {
   if (datos.confianza === 'baja') console.log('  !! Confianza baja: revisa titulo y descripcion en /inventario o Sanity.');
   if (datos.datosWeb.length > 0) console.log(`  Datos tomados de internet: ${datos.datosWeb.join(' | ')}`);
   for (const fuente of datos.fuentes) console.log(`  Fuente: ${fuente.titulo} -> ${fuente.url}`);
-}
-
-async function referenciaParaProducto(datos, departamento) {
-  // Solo autos a escala, juguetes y Pokémon. El departamento manda; si no, lo que clasificó Gemini.
-  const flujo = flujoParaDepartamento(departamento) || (datos.tipoPrecio !== 'otro' ? datos.tipoPrecio : null);
-  if (!flujo) return null;
-  try {
-    const ref = await buscarReferenciaPrecio({
-      apiKey: process.env.GEMINI_API_KEY,
-      flujo,
-      producto: {
-        titulo: datos.titulo,
-        productoIdentificado: datos.productoIdentificado,
-        marca: datos.marca,
-        edicion: datos.edicion,
-        palabrasClave: datos.palabrasClave,
-        alertaValor: datos.alertaValor,
-      },
-    });
-    if (ref?.alertaValor) console.log(`  !! ${ref.alertaValor}`);
-    for (const p of ref?.precios || []) {
-      const pesos = p.moneda === 'USD' ? `US$${p.precio}${p.mxn ? ` (~$${p.mxn} MXN)` : ''}` : `$${p.precio} MXN`;
-      console.log(`  Precio ref.: ${p.tienda} (${p.tipo}) ${pesos}${p.detalle ? ` - ${p.detalle}` : ''}`);
-    }
-    if (ref && ref.precios.length === 0) console.log(`  Precio ref.: no se encontraron precios confiables${ref.nota ? ` (${ref.nota})` : ''}`);
-    return ref;
-  } catch (error) {
-    console.log(`  (No se pudo buscar referencia de precio: ${error.message})`);
-    return null;
-  }
 }
 
 function generarSlug(texto) {
@@ -187,7 +156,7 @@ async function buscarEnSanityPorHash(hash) {
   return client.fetch(`*[_type == "producto" && hashFoto == $hash][0]{_id, titulo}`, { hash });
 }
 
-async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoria, precio, cantidad, contexto, manifiesto) {
+async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoriaId, precio, cantidad, contexto, manifiesto) {
   const primeraFoto = fotosDelGrupo[0].archivo;
   const rutaPrimeraFoto = path.join(rutaCarpeta, primeraFoto);
 
@@ -206,7 +175,6 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoria, precio, c
 
   console.log(`  Titulo detectado: ${datos.titulo}`);
   mostrarIdentificacion(datos);
-  const referenciaPrecio = await referenciaParaProducto(datos, categoria.departamento);
 
   console.log(`  3. Comprimiendo y subiendo ${fotosDelGrupo.length} foto(s) a Sanity...`);
   const imagenPrincipalAsset = await subirImagenComprimida(rutaPrimeraFoto);
@@ -241,7 +209,7 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoria, precio, c
         asset: { _type: 'reference', _ref: asset._id },
       })),
     } : {}),
-    categoria: { _type: 'reference', _ref: categoria._id },
+    categoria: { _type: 'reference', _ref: categoriaId },
     palabrasClave: datos.palabrasClave || [],
     hashFoto: hashPrincipal,
     ...(datos.marca ? { marca: datos.marca } : {}),
@@ -249,7 +217,6 @@ async function procesarProducto(rutaCarpeta, fotosDelGrupo, categoria, precio, c
     ...(datos.edicion ? { edicion: datos.edicion } : {}),
     ...(datos.edadRecomendada ? { edadRecomendada: datos.edadRecomendada } : {}),
     ...(datos.altTexto ? { altTexto: datos.altTexto } : {}),
-    ...(referenciaPrecio ? { referenciaPrecio } : {}),
   };
 
   const creado = await client.create(documento);
@@ -278,7 +245,7 @@ async function main() {
 
   console.log('Buscando la categoria en Sanity...');
   const categoria = await client.fetch(
-    `*[_type == "categoria" && titulo == $titulo][0]{_id, departamento}`,
+    `*[_type == "categoria" && titulo == $titulo][0]{_id}`,
     { titulo: categoriaTitulo }
   );
 
@@ -386,7 +353,7 @@ async function main() {
     const contexto = contextoTexto.trim() !== '' ? contextoTexto.trim() : null;
 
     try {
-      await procesarProducto(rutaCarpeta, fotosDelGrupo, categoria, precio, cantidad, contexto, manifiesto);
+      await procesarProducto(rutaCarpeta, fotosDelGrupo, categoria._id, precio, cantidad, contexto, manifiesto);
       if (precio === null || cantidad === null) {
         resultados.incompletos++;
       } else {

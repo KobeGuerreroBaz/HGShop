@@ -10,8 +10,6 @@
 //    configuración original (alias "latest", pensamiento por defecto).
 //    Así nunca se traba una subida.
 
-import { esFlujoValido, limpiarReferenciaPrecio } from './flujos-precio.mjs';
-
 // Modelo fijo: no cambia solo cuando Google saca una versión nueva.
 // Para probar otro modelo, cámbialo aquí (ej. 'gemini-3.8-flash').
 const MODELO = 'gemini-3.5-flash-lite';
@@ -46,8 +44,6 @@ const ESQUEMA_RESPUESTA = {
     productoIdentificado: { type: 'string' },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] },
     datosWeb: { type: 'array', items: { type: 'string' } },
-    tipoPrecio: { type: 'string', enum: ['autos-escala', 'juguete', 'pokemon', 'otro'] },
-    alertaValor: TEXTO_NULO,
   },
   required: [
     'titulo',
@@ -57,14 +53,8 @@ const ESQUEMA_RESPUESTA = {
     'productoIdentificado',
     'confianza',
     'datosWeb',
-    'tipoPrecio',
   ],
 };
-
-const REGLAS_TIPO = `
-Clasificación (no se muestra al cliente):
-- tipoPrecio: "autos-escala" si es un vehículo a escala o diecast (Hot Wheels, Matchbox, M2, Greenlight, Majorette, Cars de Mattel, etc.); "pokemon" si es producto de Pokémon TCG (cartas, sobres, cajas, latas); "juguete" si es cualquier otro juguete (muñecas, figuras, LEGO, peluches, juegos de mesa, vehículos de juguete que no son a escala); "otro" para todo lo demás (cremas, perfumes, termos, ropa, artículos de bebé, mochilas, herramientas).
-- alertaValor: SOLO para "autos-escala" y "pokemon". Si en la foto ves señales de que la pieza puede valer bastante más de lo normal, descríbelas en una frase (ej. "Posible Super Treasure Hunt: pintura Spectraflame y llantas Real Riders", "Treasure Hunt: logo de flama en la tarjeta", "Línea premium Car Culture", "Carta con ilustración especial"). null si no hay señales o para cualquier otro tipo.`;
 
 const REGLAS_REDACCION = `
 Reglas de redacción:
@@ -115,8 +105,6 @@ PASO 2 - En esta ocasión NO tienes acceso a internet: usa solo lo que se ve en 
   prompt += REGLAS_REDACCION;
   prompt += `
 - marca, edadRecomendada, capacidad y edicion: null si no aplican o no se confirmaron (por la foto, el contexto del vendedor${conBusqueda ? ' o una fuente con confianza alta/media' : ''}).
-
-${REGLAS_TIPO}
 
 Tu respuesta debe ser ÚNICAMENTE el objeto JSON del esquema, sin texto antes ni después.`;
 
@@ -173,33 +161,20 @@ function extraerFuentes(candidato) {
   return fuentes;
 }
 
-// IMPORTANTE (comprobado el 22 oct 2026): con la búsqueda de Google activa NO se usa
-// responseJsonSchema. Con el esquema, Gemini deja de buscar (0 búsquedas, 0 fuentes) y
-// contesta de memoria. Por eso, en las llamadas con búsqueda se pide el JSON en el prompt
-// y se deja solo responseMimeType; el código ya valida y tolera la respuesta.
-const textoEsquema = (esquema) =>
-  `\n\nFORMATO DE RESPUESTA: devuelve ÚNICAMENTE un objeto JSON válido (sin texto antes ni después, sin bloque de código) que cumpla este esquema JSON:\n${JSON.stringify(esquema)}`;
-
-class BusquedaNoRealizada extends Error {}
-
-/** true si Google realmente buscó (hay consultas de búsqueda o fuentes). */
-const huboBusqueda = (candidato, fuentes) =>
-  (candidato?.groundingMetadata?.webSearchQueries?.length || 0) > 0 || fuentes.length > 0;
-
 async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqueda }) {
   const cuerpo = {
     contents: [
       {
         role: 'user',
         parts: [
-          { text: construirPrompt(contexto, conBusqueda) + (conBusqueda ? textoEsquema(ESQUEMA_RESPUESTA) : '') },
+          { text: construirPrompt(contexto, conBusqueda) },
           { inline_data: { mime_type: mimeType, data: imagenBase64 } },
         ],
       },
     ],
     generationConfig: {
       responseMimeType: 'application/json',
-      ...(conBusqueda ? {} : { responseJsonSchema: ESQUEMA_RESPUESTA }),
+      responseJsonSchema: ESQUEMA_RESPUESTA,
     },
   };
   if (conBusqueda) {
@@ -229,13 +204,7 @@ async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqu
     throw new Error('Gemini devolvio una respuesta incompleta o con JSON roto');
   }
 
-  const fuentes = conBusqueda ? extraerFuentes(candidato) : [];
-  // Si pidió búsqueda y Gemini no buscó, el resultado vino de memoria: se descarta y
-  // analizarProducto cae al plan B (solo foto, confianza baja) en vez de fingir verificación.
-  if (conBusqueda && !huboBusqueda(candidato, fuentes)) {
-    throw new BusquedaNoRealizada('Gemini no hizo la busqueda en internet');
-  }
-  return { datos, fuentes };
+  return { datos, fuentes: conBusqueda ? extraerFuentes(candidato) : [] };
 }
 
 function normalizar(datos, fuentes, busquedaUsada) {
@@ -252,11 +221,6 @@ function normalizar(datos, fuentes, busquedaUsada) {
     productoIdentificado: (datos.productoIdentificado || datos.titulo).trim(),
     confianza: busquedaUsada && confianzasValidas.includes(datos.confianza) ? datos.confianza : 'baja',
     datosWeb: busquedaUsada && Array.isArray(datos.datosWeb) ? datos.datosWeb : [],
-    tipoPrecio: esFlujoValido(datos.tipoPrecio) ? datos.tipoPrecio : 'otro',
-    alertaValor:
-      esFlujoValido(datos.tipoPrecio) && datos.tipoPrecio !== 'juguete' && typeof datos.alertaValor === 'string' && datos.alertaValor.trim()
-        ? datos.alertaValor.trim()
-        : null,
     fuentes,
     busquedaUsada,
   };
@@ -299,218 +263,4 @@ export async function analizarProducto({
   const resultado = normalizar(datos, [], false);
   if (avisoBusqueda) resultado.avisoBusqueda = avisoBusqueda;
   return resultado;
-}
-
-
-// ===========================================================================
-// REFERENCIA DE PRECIO (segunda llamada, solo autos a escala, juguetes y Pokémon)
-// ===========================================================================
-// Busca precios ACTUALES con reglas de fuentes distintas por tipo de producto.
-// Nunca decide el precio: devuelve lo encontrado con tienda, moneda y link.
-
-const REGLAS_FUENTES = {
-  'autos-escala': `Fuentes PERMITIDAS:
-- Precio de tienda en EE.UU. de la marca o tiendas grandes (walmart.com, target.com, creations.mattel.com, sitio oficial de la marca) → tipo "tienda", en USD.
-- eBay: SOLO ventas completadas/vendidas (sold listings), nunca anuncios activos → tipo "vendido", en USD. Da un rango típico o 1 a 3 ventas representativas.
-- Wikis y bases de coleccionistas (hotwheels.fandom.com, hobbyDB) SOLO para confirmar si es Treasure Hunt, Super Treasure Hunt, premium, RLC o edición limitada; no son fuente de precio.
-PROHIBIDO: MercadoLibre, Amazon y cualquier anuncio de revendedor (las comisiones y envíos inflan el precio).
-alertaValor: si confirmas que es Treasure Hunt, Super Treasure Hunt, premium, RLC, limitada o un modelo muy buscado, dilo con el motivo; null si es un mainline común.`,
-
-  juguete: `Fuentes PERMITIDAS: SOLO venta directa de tiendas, nunca revendedores.
-- México (MXN): Walmart México, Liverpool, Coppel, Sanborns, El Palacio de Hierro, Juguetrón, Soriana, Amazon México SOLO cuando el vendedor es Amazon, tienda oficial de la marca en MercadoLibre (Tienda oficial).
-- Si el producto no existe en México: tiendas de EE.UU. (walmart.com, target.com, amazon.com cuando vende Amazon) en USD.
-Todos con tipo "tienda". PROHIBIDO: vendedores particulares o revendedores en MercadoLibre, Amazon u otros.
-alertaValor: null.`,
-
-  pokemon: `Fuentes PERMITIDAS:
-- TCGplayer (precio de mercado / market price) → tipo "precio-mercado", en USD.
-- eBay SOLO ventas completadas/vendidas → tipo "vendido", en USD.
-- Collectr si aparece → tipo "precio-mercado".
-- Pokémon Center → tipo "tienda".
-- MercadoLibre y Amazon, incluida reventa → tipo "tienda" si vende la marca o Amazon, "reventa" si es otro vendedor.
-Distingue carta suelta vs. producto sellado (sobre, caja, lata). En cartas, cuida la versión exacta: número de carta, set, holo/reverse holo, idioma y estado si se ve.
-alertaValor: si es carta valiosa (ilustración especial, secreta, full art, primera edición) o producto sellado descontinuado, dilo con el motivo; null si no.`,
-};
-
-const ESQUEMA_PRECIO = {
-  type: 'object',
-  properties: {
-    productoBuscado: { type: 'string' },
-    alertaValor: TEXTO_NULO,
-    precios: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          tienda: { type: 'string' },
-          dominio: { type: 'string' },
-          tipo: { type: 'string', enum: ['tienda', 'vendido', 'precio-mercado', 'reventa'] },
-          precio: { type: 'number' },
-          moneda: { type: 'string', enum: ['MXN', 'USD'] },
-          detalle: TEXTO_NULO,
-        },
-        required: ['tienda', 'dominio', 'tipo', 'precio', 'moneda'],
-      },
-    },
-    nota: TEXTO_NULO,
-  },
-  required: ['productoBuscado', 'precios'],
-};
-
-function construirPromptPrecio(flujo, producto) {
-  const datos = [
-    `Producto: ${producto.productoIdentificado || producto.titulo}`,
-    producto.titulo && producto.titulo !== producto.productoIdentificado ? `Título en el catálogo: ${producto.titulo}` : '',
-    producto.marca ? `Marca: ${producto.marca}` : '',
-    producto.edicion ? `Edición/serie: ${producto.edicion}` : '',
-    Array.isArray(producto.palabrasClave) && producto.palabrasClave.length ? `Palabras clave: ${producto.palabrasClave.join(', ')}` : '',
-    producto.alertaValor ? `Señal vista en la foto: ${producto.alertaValor}` : '',
-  ].filter(Boolean).join('\n');
-
-  return `Eres asistente de una tienda de reventa en Monterrey, México. Busca en Google precios ACTUALES de ESTE producto exacto para que el dueño decida su precio de venta.
-
-${datos}
-
-${REGLAS_FUENTES[flujo]}
-
-Reglas generales:
-- Solo incluye precios que viste en una fuente durante la búsqueda. Nunca inventes ni estimes un precio.
-- Debe ser el mismo producto y la misma variante (modelo, color, tamaño, edición). Si no estás seguro de que sea el mismo, no lo incluyas.
-- Escribe el precio tal como aparece, en su moneda (MXN o USD); no conviertas.
-- tienda: nombre corto de la tienda (ej. "Walmart EE.UU.", "Liverpool", "eBay (vendido)", "TCGplayer"). dominio: el dominio de la fuente (ej. "walmart.com", "liverpool.com.mx").
-- detalle: dato corto útil si aplica (ej. "promedio de 5 ventas", "sobre sellado", "carta suelta NM", "precio con descuento").
-- Máximo 8 precios, los más relevantes primero. Si no encuentras nada confiable, lista vacía y explica por qué en "nota".
-- productoBuscado: el nombre exacto de lo que buscaste.
-- Todo en español.
-
-Tu respuesta debe ser ÚNICAMENTE el objeto JSON del esquema.`;
-}
-
-/** Une cada precio con el link real que devolvió Google (por dominio). */
-function asignarLinks(precios, fuentes) {
-  return precios.map((p) => {
-    const dominio = String(p.dominio || '').toLowerCase().replace(/^www\./, '');
-    const fuente = dominio
-      ? fuentes.find((f) => {
-          const t = String(f.titulo || '').toLowerCase().replace(/^www\./, '');
-          return t && (t.includes(dominio) || dominio.includes(t));
-        })
-      : null;
-    return { ...p, url: fuente ? fuente.url : null };
-  });
-}
-
-let cacheTipoCambio = null; // { fecha, valor }
-
-/**
- * Pesos por dólar del día (fuente pública Frankfurter, sin llave). null si no responde:
- * en ese caso los precios en dólares se muestran sin conversión.
- */
-export async function obtenerTipoCambioUsdMxn() {
-  const hoy = new Date().toISOString().slice(0, 10);
-  if (cacheTipoCambio && cacheTipoCambio.fecha === hoy) return cacheTipoCambio.valor;
-  const intentos = [
-    ['https://api.frankfurter.dev/v2/rate/USD/MXN', (j) => j?.rate],
-    ['https://api.frankfurter.dev/v1/latest?base=USD&symbols=MXN', (j) => j?.rates?.MXN],
-  ];
-  for (const [url, leer] of intentos) {
-    try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      if (!r.ok) continue;
-      const valor = Number(leer(await r.json()));
-      if (Number.isFinite(valor) && valor > 5 && valor < 100) {
-        cacheTipoCambio = { fecha: hoy, valor: Math.round(valor * 100) / 100 };
-        return cacheTipoCambio.valor;
-      }
-    } catch {
-      // probar la siguiente
-    }
-  }
-  return null;
-}
-
-/**
- * Busca la referencia de precio de un producto ya identificado.
- * @param {object} opciones
- * @param {string} opciones.apiKey
- * @param {'autos-escala'|'juguete'|'pokemon'} opciones.flujo
- * @param {{titulo:string, productoIdentificado?:string, marca?:string, edicion?:string, palabrasClave?:string[], alertaValor?:string}} opciones.producto
- * @returns {Promise<object>} referencia limpia (ver limpiarReferenciaPrecio) lista para mostrar y guardar.
- */
-export async function buscarReferenciaPrecio({ apiKey, flujo, producto }) {
-  // Si Gemini no busca en internet, un precio sería inventado: se reintenta una vez y, si
-  // sigue sin buscar, se devuelve la referencia vacía y avisando, nunca precios sin verificar.
-  try {
-    return await buscarReferenciaPrecioUnaVez({ apiKey, flujo, producto });
-  } catch (error) {
-    if (!(error instanceof BusquedaNoRealizada)) throw error;
-  }
-  try {
-    return await buscarReferenciaPrecioUnaVez({ apiKey, flujo, producto });
-  } catch (error) {
-    if (!(error instanceof BusquedaNoRealizada)) throw error;
-    return limpiarReferenciaPrecio({
-      fecha: new Date().toISOString().slice(0, 10),
-      flujo,
-      productoBuscado: producto.productoIdentificado || producto.titulo,
-      alertaValor: null,
-      tipoCambio: null,
-      nota: 'La búsqueda en internet no se realizó; no se muestran precios sin verificar. Vuelve a intentar.',
-      precios: [],
-      fuentes: [],
-    });
-  }
-}
-
-async function buscarReferenciaPrecioUnaVez({ apiKey, flujo, producto }) {
-  if (!apiKey) throw new Error('Falta GEMINI_API_KEY');
-  if (!esFlujoValido(flujo)) throw new Error('Este tipo de producto no usa búsqueda de precio');
-  if (!producto?.titulo && !producto?.productoIdentificado) throw new Error('Falta el nombre del producto');
-
-  const cuerpo = {
-    contents: [{ role: 'user', parts: [{ text: construirPromptPrecio(flujo, producto) + textoEsquema(ESQUEMA_PRECIO) }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      ...(NIVEL_PENSAMIENTO ? { thinkingConfig: { thinkingLevel: NIVEL_PENSAMIENTO } } : {}),
-    },
-  };
-
-  const [respuesta, tipoCambio] = await Promise.all([
-    fetch(urlModelo(MODELO), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify(cuerpo),
-      signal: AbortSignal.timeout(TIEMPO_MAXIMO_CON_BUSQUEDA_MS + 15000),
-    }),
-    obtenerTipoCambioUsdMxn(),
-  ]);
-
-  const json = await respuesta.json().catch(() => null);
-  if (!respuesta.ok) {
-    throw new Error(`Gemini respondio con error: ${json?.error?.message || `HTTP ${respuesta.status}`}`);
-  }
-  const candidato = json?.candidates?.[0];
-  const datos = parsearJson(extraerTexto(candidato));
-  if (!datos || !Array.isArray(datos.precios)) {
-    throw new Error('Gemini devolvio una respuesta incompleta; intenta de nuevo');
-  }
-
-  const fuentes = extraerFuentes(candidato);
-  if (!huboBusqueda(candidato, fuentes)) throw new BusquedaNoRealizada('Gemini no hizo la busqueda en internet');
-  const precios = asignarLinks(datos.precios, fuentes).map((p) => ({
-    ...p,
-    mxn: p.moneda === 'USD' && tipoCambio ? Math.round(Number(p.precio) * tipoCambio) : null,
-  }));
-
-  return limpiarReferenciaPrecio({
-    fecha: new Date().toISOString().slice(0, 10),
-    flujo,
-    productoBuscado: datos.productoBuscado,
-    alertaValor: flujo === 'juguete' ? null : datos.alertaValor || producto.alertaValor || null,
-    tipoCambio,
-    nota: datos.nota,
-    precios,
-    fuentes,
-  });
 }

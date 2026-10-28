@@ -84,11 +84,6 @@ import Layout from '../layouts/Layout.astro';
         <h2 id="titulo-producto" class="text-lg font-semibold text-neutral-900 mt-3"></h2>
         <p id="categoria-producto" class="text-sm text-neutral-500"></p>
 
-        <div id="caja-precio-ref" class="hidden mt-3"></div>
-        <button id="boton-buscar-precio" type="button" class="hidden mt-3 w-full border border-sky-300 text-sky-900 bg-sky-50 rounded-md py-2 text-xs font-medium">
-          💲 Buscar referencia de precio
-        </button>
-
         <div class="mt-4">
           <label class="text-xs text-neutral-500">Precio</label>
           <input id="campo-precio" type="number" inputmode="decimal" placeholder="$" class="w-full border border-neutral-200 rounded-md px-3 py-3 text-lg font-medium mt-1" />
@@ -176,8 +171,6 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   import type { DepartamentoConConteo, ProductoParaAdmin, MetadatosBusqueda, MetadatosProductoPedido, ResumenBusquedas } from '../lib/tipos';
-  import { flujoParaDepartamento } from '../lib/flujos-precio.mjs';
-  import { mostrarCargandoPrecio, mostrarErrorPrecio, pintarReferenciaPrecio } from '../lib/vista-precio';
 
   const CLAVE_STORAGE = 'hgshop-upload-pin';
   let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
@@ -585,59 +578,6 @@ import Layout from '../layouts/Layout.astro';
     cargarDepartamentos();
   });
 
-  // ---- Referencia de precio (autos a escala, juguetes y Pokémon) ----
-  const cajaPrecioRef = document.getElementById('caja-precio-ref') as HTMLElement;
-  const botonBuscarPrecio = document.getElementById('boton-buscar-precio') as HTMLButtonElement;
-  let turnoPrecio = 0;
-
-  function mostrarReferenciaGuardada(producto: ProductoParaAdmin) {
-    turnoPrecio++;
-    const flujo = flujoParaDepartamento(producto.departamento);
-    if (producto.referenciaPrecio) {
-      pintarReferenciaPrecio(cajaPrecioRef, producto.referenciaPrecio);
-    } else {
-      cajaPrecioRef.classList.add('hidden');
-      cajaPrecioRef.innerHTML = '';
-    }
-    botonBuscarPrecio.classList.toggle('hidden', !flujo);
-    botonBuscarPrecio.disabled = false;
-    botonBuscarPrecio.textContent = producto.referenciaPrecio ? '💲 Actualizar referencia de precio' : '💲 Buscar referencia de precio';
-  }
-
-  botonBuscarPrecio.addEventListener('click', async () => {
-    const producto = productoActual;
-    if (!producto) return;
-    const miTurno = ++turnoPrecio;
-    botonBuscarPrecio.disabled = true;
-    botonBuscarPrecio.textContent = 'Buscando…';
-    mostrarCargandoPrecio(cajaPrecioRef);
-    try {
-      const respuesta = await fetch('/api/referencia-precio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headersConPin() },
-        body: JSON.stringify({
-          productoId: producto._id,
-          departamento: producto.departamento,
-          titulo: producto.titulo,
-          marca: producto.marca,
-          palabrasClave: producto.palabrasClave || [],
-        }),
-      });
-      const resultado = await respuesta.json();
-      if (miTurno !== turnoPrecio) return; // ya se abrió otro producto
-      if (!respuesta.ok || resultado.error) throw new Error(resultado.error || `Error ${respuesta.status}`);
-      producto.referenciaPrecio = resultado;
-      pintarReferenciaPrecio(cajaPrecioRef, resultado);
-      botonBuscarPrecio.textContent = '💲 Actualizar referencia de precio';
-    } catch (error: any) {
-      if (miTurno !== turnoPrecio) return;
-      mostrarErrorPrecio(cajaPrecioRef, error.message);
-      botonBuscarPrecio.textContent = '💲 Buscar referencia de precio';
-    } finally {
-      if (miTurno === turnoPrecio) botonBuscarPrecio.disabled = false;
-    }
-  });
-
   function renderizarProducto(producto: ProductoParaAdmin) {
     if (modoActual === 'faltantes') {
       contador.textContent = `${productosPendientes.length} sin precio en este departamento`;
@@ -658,7 +598,6 @@ import Layout from '../layouts/Layout.astro';
     (tarjeta as any).dataset.productoId = producto._id;
 
     productoActual = producto;
-    mostrarReferenciaGuardada(producto);
     mensajeMover.classList.add('hidden');
     prepararMover(producto);
 
