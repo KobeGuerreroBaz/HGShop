@@ -15,6 +15,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const args = process.argv.slice(2);
 const valor = (b) => {
@@ -23,18 +24,13 @@ const valor = (b) => {
 };
 const expandir = (p) => (p && p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p);
 
-const CARPETA_SCRAPER = path.resolve(expandir(valor('--scraper') || '~/Desktop/scraper-hotwheels'));
-const CARPETA_SALIDA = path.resolve('scripts/salida');
-const ARCHIVO_BASE = path.join(CARPETA_SALIDA, 'base-precios.json');
-// Los precios de este valor o menos no se toman en cuenta (todos los vendedores)
-const PRECIO_MINIMO = Number(valor('--minimo') ?? 30);
-let bajos = 0;
+export const CARPETA_SCRAPER_DEFECTO = path.join(os.homedir(), 'Desktop', 'scraper-hotwheels');
 
 const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, oct: 10, nov: 11, dic: 12 };
 const titulo = (s) => s.split(/[-_\s]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 
 /** "mario-lopez-oct20" → { vendedor: "Mario Lopez", fecha: "2026-10-20" } */
-function leerAlbum(album) {
+export function leerAlbum(album) {
   const m = String(album).match(/^(.*?)-(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)(\d{1,2})$/i);
   if (!m) return { vendedor: titulo(album), fecha: '' };
   const hoy = new Date();
@@ -44,6 +40,27 @@ function leerAlbum(album) {
   if (new Date(anio, mes - 1, dia) > hoy) anio -= 1; // una fecha "futura" es del año pasado
   const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
   return { vendedor: titulo(m[1]), fecha };
+}
+
+/**
+ * Cuántos carritos trae una foto según su pie (para ubicar la posición en la foto).
+ * "1-$80. 2-$85" → 2 · "$89/$39" → 2 · "F1\n80 30 35\n60 60 50" → 6 · "$55 c/u" → 0 (no se sabe).
+ */
+export function carritosDelPie(pie) {
+  const t = String(pie || '');
+  const porPos = [...t.matchAll(/(\d{1,2})\s*-\s*(?:\$\s*\d+|\d+\s*\$)/g)].map((m) => Number(m[1]));
+  if (porPos.length) return Math.max(...porPos);
+  if (/c\s*[\/)]\s*u|todos|lote|juntos/i.test(t)) return 0;
+  const conSigno = t.match(/\$\s*\d+|\d+\s*\$/g);
+  if (conSigno) return conSigno.length;
+  let n = 0;
+  for (const linea of t.split(/\n+/).map((l) => l.trim()).filter(Boolean)) {
+    if (/^[A-Za-z]{1,3}\s*\d{0,3}$/.test(linea)) continue; // rótulo "F1"
+    const piezas = linea.split(/[\s,\/|]+/).filter(Boolean);
+    if (piezas.some((p) => !/^\d{2,5}$/.test(p) && !/^[A-ZÁÉÍÓÚÑ.&-]{2,}$/.test(p))) return 0;
+    n += piezas.filter((p) => /^\d{2,5}$/.test(p)).length;
+  }
+  return n;
 }
 
 /** CSV simple con comillas. */
@@ -72,6 +89,17 @@ function leerCsv(texto) {
   return resto.map((f) => Object.fromEntries(encabezado.map((h, k) => [h.trim(), (f[k] ?? '').trim()])));
 }
 
+/**
+ * Arma la base y la guarda en <carpetaSalida>/base-precios.json.
+ * La usan este script (desde la terminal) y la página de revisión (después de procesar un álbum).
+ */
+export function armarBase({ carpetaScraper = CARPETA_SCRAPER_DEFECTO, carpetaSalida = path.resolve('scripts/salida'), minimo = 30 } = {}) {
+const CARPETA_SCRAPER = path.resolve(carpetaScraper);
+const CARPETA_SALIDA = path.resolve(carpetaSalida);
+const ARCHIVO_BASE = path.join(CARPETA_SALIDA, 'base-precios.json');
+// Los precios de este valor o menos no se toman en cuenta (todos los vendedores)
+const PRECIO_MINIMO = Number(minimo);
+let bajos = 0;
 const base = [];
 const resumen = [];
 
@@ -82,12 +110,17 @@ if (fs.existsSync(archivoMaestro)) {
   let n = 0, conLink = 0;
   // Link de Facebook de cada foto: lo guardó el scraper en debug/<album>_foto_NNN.json
   const links = new Map();
+  const pies = new Map();
   const linkDe = (album, foto) => {
     const k = `${album}|${foto}`;
     if (!links.has(k)) {
       const archivo = path.join(CARPETA_SCRAPER, 'debug', `${album}_foto_${String(foto).padStart(3, '0')}.json`);
       let url = null;
-      try { url = JSON.parse(fs.readFileSync(archivo, 'utf-8')).url || null; } catch {}
+      try {
+        const d = JSON.parse(fs.readFileSync(archivo, 'utf-8'));
+        url = d.url || null;
+        pies.set(k, d.pie || '');
+      } catch {}
       // acepta www., web. y m.facebook.com, y lo deja como www. (sin parámetros de redirección)
       const limpio = url && /^https:\/\/((www|web|m)\.)?facebook\.com\//.test(url)
         ? url.replace(/^https:\/\/((web|m)\.)?facebook\.com\//, 'https://www.facebook.com/').replace(/&_rdc=\d+|&_rdr\b/g, '')
@@ -96,6 +129,13 @@ if (fs.existsSync(archivoMaestro)) {
     }
     return links.get(k);
   };
+  // Posición más alta que aparece en cada foto (incluye las filas que luego se filtran)
+  const maxPos = new Map();
+  for (const f of maestro.filas || []) {
+    const k = `${f.album}|${f.foto}`;
+    const pos = String(f.posiciones || '').split(/[,\s]+/).map(Number).filter((n) => n > 0);
+    if (pos.length) maxPos.set(k, Math.max(maxPos.get(k) || 0, ...pos));
+  }
   for (const f of maestro.filas || []) {
     if (typeof f.precioUnitario !== 'number' || f.precioUnitario <= 0) continue;
     if (f.precioUnitario <= PRECIO_MINIMO) { bajos++; continue; }
@@ -120,13 +160,15 @@ if (fs.existsSync(archivoMaestro)) {
       notas: f.notas || '',
       archivoFoto: archivoFoto && fs.existsSync(archivoFoto) ? archivoFoto : null,
       url: linkDe(f.album, f.foto),
+      // cuántos carritos trae la foto (para resaltar la posición): lo que diga el pie o la posición más alta vista
+      totalFoto: Math.max(carritosDelPie(pies.get(`${f.album}|${f.foto}`)), maxPos.get(`${f.album}|${f.foto}`) || 0),
     });
     if (base[base.length - 1].url) conLink++;
     n++;
   }
   resumen.push(`Álbumes (${path.basename(CARPETA_SCRAPER)}): ${n} precios de ${(maestro.albumes || []).length} álbum(es), ${conLink} con link de Facebook`);
 } else {
-  console.warn(`[!] No encontré ${archivoMaestro}. Usa --scraper <carpeta> si lo moviste.`);
+  resumen.push(`[!] No encontré ${archivoMaestro}. Usa --scraper <carpeta> si lo moviste.`);
 }
 
 // ---------- 2. CSV por vendedor (precios-<vendedor>.csv) ----------
@@ -166,7 +208,17 @@ fs.writeFileSync(ARCHIVO_BASE, JSON.stringify({ generada: new Date().toISOString
 
 const porVendedor = {};
 for (const a of base) porVendedor[a.vendedor] = (porVendedor[a.vendedor] || 0) + 1;
-console.log(resumen.join('\n'));
-console.log(`\nBase lista: ${base.length} precios (se dejaron fuera ${bajos} de $${PRECIO_MINIMO} o menos)`);
-for (const [v, n] of Object.entries(porVendedor)) console.log(`  ${v}: ${n}`);
-console.log(`Archivo: ${ARCHIVO_BASE}`);
+return { base, resumen, porVendedor, bajos, minimo: PRECIO_MINIMO, archivo: ARCHIVO_BASE };
+}
+
+// ---------- Desde la terminal ----------
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const r = armarBase({
+    carpetaScraper: expandir(valor('--scraper') || CARPETA_SCRAPER_DEFECTO),
+    minimo: valor('--minimo') ?? 30,
+  });
+  console.log(r.resumen.join('\n'));
+  console.log(`\nBase lista: ${r.base.length} precios (se dejaron fuera ${r.bajos} de $${r.minimo} o menos)`);
+  for (const [v, n] of Object.entries(r.porVendedor)) console.log(`  ${v}: ${n}`);
+  console.log(`Archivo: ${r.archivo}`);
+}

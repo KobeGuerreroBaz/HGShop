@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Revisar precios · HG Shop</title>
+<title>Carritos · Revisar precios</title>
 <style>
   :root {
     --fondo: #f5f5f4; --tarjeta: #fff; --texto: #1c1917; --suave: #78716c; --borde: #e7e5e4;
@@ -24,6 +24,58 @@
   .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; padding: 14px; margin-bottom: 14px; display: grid; grid-template-columns: 230px 1fr; gap: 16px; }
   .tarjeta.hecha { opacity: .65; }
   @media (max-width: 760px) { .tarjeta { grid-template-columns: 1fr; } }
+  .cabecera { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cabecera .botones button { padding: 7px 12px; }
+  /* Ventanas: agregar álbum, historial */
+  .ventana-fondo { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 15; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
+  .ventana-fondo[hidden] { display: none; }
+  .ventana { background: var(--tarjeta); border-radius: 14px; padding: 18px; width: min(560px, 100%); }
+  .ventana h2 { font-size: 17px; margin: 0 0 12px; }
+  .ventana label { display: block; font-size: 13px; color: var(--suave); margin: 12px 0 4px; }
+  .ventana input[type=url], .ventana input[type=text], .ventana input[type=date], .ventana select { width: 100%; font-size: 16px; padding: 9px 10px; }
+  .ventana .fila { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+  .ventana .ayuda { font-size: 12px; color: var(--suave); margin-top: 4px; }
+  .ventana .error { color: var(--rojo); font-size: 13px; min-height: 1.2em; margin-top: 8px; }
+  .chequeo { display: flex !important; gap: 8px; align-items: center; color: var(--texto) !important; font-size: 14px !important; }
+  .grupo-vendedor { border-top: 1px solid var(--borde); padding: 10px 0; }
+  .grupo-vendedor h3 { font-size: 15px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .album-fila { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: var(--suave); }
+  /* Panel de avance del álbum */
+  #avance { position: fixed; right: 16px; bottom: 16px; width: min(520px, calc(100vw - 32px)); background: #1c1917; color: #f5f5f4; border-radius: 14px; z-index: 12; box-shadow: 0 8px 30px rgba(0,0,0,.3); }
+  #avance[hidden] { display: none; }
+  #avance .cab { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; gap: 8px; flex-wrap: wrap; }
+  #avance .cab b { font-size: 14px; }
+  #avance pre { margin: 0; padding: 0 14px 10px; max-height: 220px; overflow: auto; font: 11px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: #d6d3d1; }
+  #avance pre.oculto { display: none; }
+  #avance button { background: #44403c; color: #fff; border-color: #57534e; }
+  #avance .login { background: #b45309; color: #fff; padding: 10px 14px; font-size: 13px; }
+  #avance .login[hidden] { display: none; }
+  /* iPhone */
+  @media (max-width: 760px) {
+    header { padding: 10px 12px; position: static; }
+    h1 { font-size: 17px; }
+    .resumen { font-size: 11px; }
+    /* filtros en una sola fila que se desliza de lado */
+    #filtros { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+    #filtros .filtro { white-space: nowrap; flex: none; }
+    #depto { width: 100%; }
+    #avance pre { max-height: 110px; }
+    main { padding: 10px; }
+    .tarjeta { padding: 10px; gap: 10px; }
+    .mio img { max-height: 260px; }
+    button { padding: 8px 12px; font-size: 14px; }
+    .av img { width: 76px; height: 76px; }
+    .acciones input[type=number] { flex: 1; min-width: 0; }
+    .acciones button.primario { flex: 1; }
+    .filtro { padding: 6px 11px; }
+    /* visor en iPhone: pie arriba, botones abajo; el zoom es con pellizco o doble toque */
+    .visor-lienzo { inset: 36px 0 100px 0; }
+    .visor-para { font-size: 12px; }
+    .visor-barra { height: 100px; flex-wrap: wrap; align-content: center; gap: 6px; }
+    .visor-pie { order: -1; flex-basis: 100%; max-width: 100%; font-size: 13px; }
+    .visor-sep, .visor-barra [data-v=menos], .visor-barra [data-v=mas], .visor-barra [data-v=ajustar] { display: none; }
+    .visor-barra button, .visor-barra a { padding: 8px 14px; min-width: 44px; }
+  }
   .mio img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fafaf9; border-radius: 10px; border: 1px solid var(--borde); cursor: zoom-in; }
   .mio .titulo { font-weight: 600; margin-top: 8px; }
   .mio .meta { color: var(--suave); font-size: 12px; margin-top: 2px; }
@@ -52,6 +104,16 @@
   .av .sinfoto { width: 56px; height: 56px; border-radius: 6px; background: var(--fondo); display: grid; place-items: center; color: var(--suave); font-size: 10px; text-align: center; }
   .av b { font-size: 14px; }
   .av.confirmada { border-color: var(--verde); background: #f0fdf4; }
+  .av.version { border-color: #a78bfa; background: #f5f3ff; }
+  .chip.morado { background: #ede9fe; color: #6d28d9; }
+  button.ver { border-color: #a78bfa; color: #6d28d9; }
+  .ref-version { font-size: 12px; color: #6d28d9; margin-top: 2px; }
+  .chip.nuevo { background: #fde68a; color: #78350f; font-weight: 600; }
+  .av.nueva { box-shadow: 0 0 0 2px #f59e0b; }
+  .novedad { font-size: 13px; margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: #fffbeb; border: 1px solid #fcd34d; }
+  .novedad .arriba { color: var(--azul); font-weight: 600; }
+  .novedad .debajo { color: var(--rojo); font-weight: 600; }
+  .novedad .igual { color: var(--verde); font-weight: 600; }
   .av-botones { display: flex; gap: 4px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
   .av-botones button { padding: 1px 7px; font-size: 12px; }
   .av a { color: var(--azul); font-size: 12px; text-decoration: none; }
@@ -70,7 +132,15 @@
   #mas { display: block; margin: 0 auto 30px; }
   #visor { position: fixed; inset: 0; background: #0c0a09; z-index: 20; }
   #visor[hidden] { display: none; }
-  .visor-lienzo { position: absolute; inset: 0 0 64px 0; overflow: hidden; cursor: grab; touch-action: none; }
+  .visor-para { position: absolute; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; justify-content: center; padding: 0 12px; color: #e7e5e4; font-size: 14px; background: #1c1917; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .visor-para b { color: #fff; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; }
+  .visor-barra button.si { border-color: #22c55e; color: #bbf7d0; }
+  .visor-barra button.no { border-color: #ef4444; color: #fecaca; }
+  .visor-barra button.ver { border-color: #a78bfa; color: #ddd6fe; }
+  .visor-ver { color: #c4b5fd; font-weight: 600; font-size: 14px; }
+  .visor-ok { color: #86efac; font-weight: 600; font-size: 14px; }
+  .visor-ok[hidden], .visor-ver[hidden], .visor-barra [hidden] { display: none; }
+  .visor-lienzo { position: absolute; inset: 36px 0 64px 0; overflow: hidden; cursor: grab; touch-action: none; }
   .visor-lienzo.arrastrando { cursor: grabbing; }
   .visor-lienzo img { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; max-width: none; border-radius: 4px; }
   .visor-barra { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; color: #fff; }
@@ -78,12 +148,48 @@
   .visor-barra button:disabled { opacity: .3; }
   .visor-pie { font-size: 15px; text-align: center; min-width: 200px; max-width: 50vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .visor-sep { width: 16px; }
-  #aviso { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--texto); color: #fff; padding: 10px 18px; border-radius: 10px; display: none; z-index: 30; }
+  #aviso { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--texto); color: #fff; padding: 10px 18px; border-radius: 10px; display: none; z-index: 30; pointer-events: none; }
+  #aviso.arriba { bottom: auto; top: 46px; }
+  /* Recuadro en la posición del carrito (cuadrícula estimada) */
+  .visor-marcas { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
+  .visor-marcas[hidden] { display: none; }
+  .marca-pos { position: absolute; border: 3px solid #facc15; border-radius: 10px; box-shadow: 0 0 0 4px rgba(0,0,0,.35); }
+  .marca-pos.sola { box-shadow: 0 0 0 9999px rgba(0,0,0,.45); }
+  .marca-pos span { position: absolute; top: 4px; left: 4px; background: #facc15; color: #1c1917; font: 600 12px/1 -apple-system, system-ui, sans-serif; padding: 3px 6px; border-radius: 6px; }
+  /* Tu carrito junto a la foto del vendedor (¼ del visor) */
+  .visor-mio { position: absolute; top: 36px; bottom: 64px; left: 0; width: 25%; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-right: 1px solid #292524; background: #0c0a09; }
+  #visor.con-mio .visor-mio { display: flex; }
+  #visor.con-mio .visor-lienzo { left: 25%; }
+  .visor-mio img { max-width: 100%; max-height: calc(100% - 64px); object-fit: contain; background: #fff; border-radius: 8px; }
+  .visor-mio-titulo { color: #e7e5e4; font-size: 13px; text-align: center; line-height: 1.3; max-height: 3.9em; overflow: hidden; }
+  .visor-mio-precio { color: #fff; font-weight: 700; font-size: 16px; }
+  .visor-mio-precio.sin { color: #fca5a5; font-size: 13px; }
+  @media (max-width: 760px) {
+    /* iPhone vertical: tu carrito arriba (¼ de la pantalla) y la foto del vendedor abajo */
+    .visor-mio { top: 36px; bottom: auto; height: 25vh; width: 100%; flex-direction: row; border-right: 0; border-bottom: 1px solid #292524; padding: 8px 12px; }
+    .visor-mio img { max-height: 100%; max-width: 45%; }
+    .visor-mio .datos { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .visor-mio-titulo { text-align: left; font-size: 12px; }
+    #visor.con-mio .visor-lienzo { left: 0; top: calc(36px + 25vh); }
+  }
+  /* iPhone: visor con el pie en su propio renglón y botones completos (va al final para ganarle a los estilos base) */
+  @media (max-width: 760px) {
+    #visor .visor-barra { height: auto; min-height: 112px; padding: 6px 8px calc(10px + env(safe-area-inset-bottom)); }
+    #visor .visor-pie { flex-basis: 100%; max-width: 100%; min-width: 0; text-align: center; }
+    #visor .visor-lienzo { inset: 36px 0 124px 0; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Revisar precios</h1>
+  <div class="cabecera">
+    <h1>Carritos · Revisar precios</h1>
+    <div class="botones">
+      <button id="btn-agregar" type="button">➕ Agregar álbum</button>
+      <button id="btn-albumes" type="button">📚 Álbumes</button>
+      <button id="btn-apagar" type="button" hidden title="Cierra la página en la Mac">⏻ Apagar</button>
+    </div>
+  </div>
   <div class="resumen" id="resumen">Cargando…</div>
   <div class="barra" id="filtros"></div>
   <div class="barra">
@@ -96,20 +202,74 @@
   <button id="mas" style="display:none">Mostrar más</button>
 </main>
 <div id="visor" hidden>
-  <div class="visor-lienzo"><img alt="" draggable="false"></div>
+  <div class="visor-para"></div>
+  <div class="visor-mio"><img alt="Tu carrito"><div class="datos"><div class="visor-mio-titulo"></div><div class="visor-mio-precio"></div></div></div>
+  <div class="visor-lienzo"><img alt="" draggable="false"><div class="visor-marcas" hidden></div></div>
   <div class="visor-barra">
     <button data-v="prev" title="Anterior (←)">←</button>
     <span class="visor-pie"></span>
     <button data-v="next" title="Siguiente (→)">→</button>
+    <button data-v="si" class="si" hidden title="Sí es mi carrito (tecla S)">✓ Es este</button>
+    <button data-v="no" class="no" hidden title="No es mi carrito: se oculta y pasa a la siguiente (tecla N)">✗ No es</button>
+    <button data-v="version" class="ver" hidden title="Es el mismo carrito pero de otro color o año: solo como idea de precio (tecla V)">≈ Otra versión</button>
+    <span class="visor-ok" hidden>✓ es este</span>
+    <span class="visor-ver" hidden>≈ otra versión</span>
+    <button data-v="deshacer" hidden title="Quitar la decisión">↺</button>
+    <button data-v="mio" hidden title="Mostrar u ocultar la foto de tu carrito">Ocultar mi carrito</button>
+    <button data-v="resaltar" hidden title="Resaltar dónde está el carrito en la foto (tecla R)">Resaltar: sí</button>
     <span class="visor-sep"></span>
-    <button data-v="menos" title="Alejar (−)">−</button>
-    <button data-v="mas" title="Acercar (+)">＋</button>
     <button data-v="ajustar" title="Ver completa (0)">Ajustar</button>
     <a data-v="facebook" target="_blank" rel="noopener" hidden>Facebook ↗</a>
     <button data-v="cerrar" title="Cerrar (Esc)">✕</button>
   </div>
 </div>
 <div id="aviso"></div>
+
+<div class="ventana-fondo" id="v-agregar" hidden>
+  <form class="ventana" id="f-agregar">
+    <h2>➕ Agregar álbum de carritos</h2>
+    <label for="a-url">Link de la PRIMERA foto del álbum (Facebook)</label>
+    <input id="a-url" type="url" placeholder="https://www.facebook.com/photo/?fbid=…&set=pcb.…" required>
+    <label for="a-vendedor">Vendedor</label>
+    <select id="a-vendedor"></select>
+    <input id="a-nuevo" type="text" placeholder="Nombre del vendedor nuevo (ej. Alain Rodriguez)" hidden style="margin-top:6px">
+    <label for="a-fecha">Fecha de la publicación</label>
+    <input id="a-fecha" type="date" required>
+    <div class="ayuda" id="a-nombre"></div>
+    <label class="chequeo"><input id="a-prueba" type="checkbox"> Solo prueba de 3 fotos (no se guarda; recomendado con vendedores nuevos)</label>
+    <div class="ayuda">Se abrirá Chromium en la Mac. Los carritos de $30 o menos no se toman en cuenta.</div>
+    <div class="error" id="a-error"></div>
+    <div class="fila">
+      <button type="button" data-cerrar>Cancelar</button>
+      <button type="submit" class="primario">Procesar</button>
+    </div>
+  </form>
+</div>
+
+<div class="ventana-fondo" id="v-albumes" hidden>
+  <div class="ventana">
+    <h2>📚 Álbumes procesados</h2>
+    <div id="lista-albumes">Cargando…</div>
+    <div class="fila"><button type="button" data-cerrar>Cerrar</button></div>
+  </div>
+</div>
+
+<div id="avance" hidden>
+  <div class="cab">
+    <b id="av-titulo">Procesando…</b>
+    <div class="botones">
+      <button type="button" id="av-ver">Ocultar detalle</button>
+      <button type="button" id="av-detener">Detener</button>
+      <button type="button" id="av-recargar" hidden>Ver precios nuevos</button>
+      <button type="button" id="av-cerrar" hidden>✕</button>
+    </div>
+  </div>
+  <div class="login" id="av-login" hidden>
+    Facebook pide iniciar sesión o un captcha: resuélvelo en la ventana de Chromium de la Mac y luego
+    <button type="button" id="av-continuar">Continuar</button>
+  </div>
+  <pre id="av-log"></pre>
+</div>
 
 <script>
 const POR_PAGINA = 25;
@@ -128,6 +288,10 @@ const fecha = (f) => {
 
 function aviso(texto, error = false) {
   const el = $('#aviso');
+  // Con la foto en grande, el botón ya cambia solo: no hace falta el mensaje. Los errores salen arriba.
+  const enVisor = !$('#visor').hidden;
+  if (enVisor && !error) return;
+  el.classList.toggle('arriba', enVisor);
   el.textContent = texto;
   el.style.background = error ? 'var(--rojo)' : 'var(--texto)';
   el.style.display = 'block';
@@ -144,6 +308,7 @@ async function api(ruta, cuerpo) {
 
 // Referencia para comparar: las coincidencias confirmadas, o la mejor si tiene 70% o más
 function referencia(p) {
+  p = { ...p, candidatos: p.candidatos.map((c) => ({ ...c, avistamientos: c.avistamientos.filter((a) => !a.otraVersion) })) };
   const fotosSi = p.candidatos.flatMap((c) => c.avistamientos.filter((a) => a.fotoConfirmada));
   const mismoNum = p.candidatos.flatMap((c) => c.avistamientos.filter((a) => a.mismoNumero));
   if (!fotosSi.length && mismoNum.length) {
@@ -157,6 +322,20 @@ function referencia(p) {
   return { min: Math.min(...precios), max: Math.max(...precios) };
 }
 
+// Precios de las fotos marcadas como "otra versión" (mismo carrito, otro color o año): solo de guía, aparte
+function refVersion(p) {
+  const pr = p.candidatos.flatMap((c) => c.avistamientos.filter((a) => a.otraVersion).map((a) => a.precio));
+  return pr.length ? { min: Math.min(...pr), max: Math.max(...pr), n: pr.length } : null;
+}
+
+// Precios nuevos (de álbumes que corriste después de guardar tu precio) de coincidencias confiables
+function novedades(p) {
+  if (p.estado?.estado !== 'guardado') return [];
+  return p.candidatos.flatMap((c) =>
+    c.avistamientos.filter((a) => a.nuevo && !a.otraVersion && (c.confirmado || c.score >= 70 || a.mismoNumero || a.fotoConfirmada))
+  );
+}
+
 function clasificar(p) {
   const ref = referencia(p);
   return {
@@ -166,11 +345,13 @@ function clasificar(p) {
     arriba: !!(p.precio && ref && p.precio > ref.max),
     revisado: !!p.estado,
     cotizado: (p.cotizado || []).length > 0,
+    novedad: novedades(p).length > 0,
   };
 }
 
 const FILTROS = [
   ['pendientes', 'Pendientes', (c) => !c.revisado],
+  ['novedades', '🔔 Novedades', (c) => c.novedad],
   ['sinPrecio', 'Sin precio', (c) => c.sinPrecio && !c.revisado],
   ['debajo', 'Mi precio debajo de la base', (c) => c.debajo && !c.revisado],
   ['arriba', 'Mi precio arriba de la base', (c) => c.arriba && !c.revisado],
@@ -204,15 +385,18 @@ function pintarFiltros() {
 
 function htmlAvistamiento(a, c) {
   const img = a.tieneFoto
-    ? `<img src="/foto/${a.i}" loading="lazy" alt="" data-foto="${a.i}" data-url="${esc(a.url || '')}" data-pie="${esc(`${a.vendedor} · ${fecha(a.fecha)} · ${a.posiciones ? 'posición ' + a.posiciones + ' · ' : ''}${dinero(a.precio)}`)}">`
+    ? `<img src="/foto/${a.i}?v=${versionBase}" loading="lazy" alt="" data-foto="${a.i}" data-key="${esc(c.key)}" data-clave="${esc(a.clave)}" data-score="${c.score}" data-ok="${a.fotoConfirmada ? 1 : 0}" data-ver="${a.otraVersion ? 1 : 0}" data-pos="${esc(a.posiciones || '')}" data-total="${a.totalFoto || 0}" data-url="${esc(a.url || '')}" data-pie="${esc(`${a.vendedor} · ${fecha(a.fecha)} · ${a.posiciones ? 'posición ' + a.posiciones + ' · ' : ''}${dinero(a.precio)}`)}">`
     : `<div class="sinfoto">sin foto</div>`;
   const datos = `data-key="${esc(c.key)}" data-clave="${esc(a.clave)}" data-score="${c.score}"`;
   const botones = a.fotoConfirmada
     ? `<span class="chip verde">es este</span><button data-accion="foto-quitar" ${datos} title="Quitar confirmación">↺</button>`
-    : `<button class="si" data-accion="foto-si" ${datos} title="Esta foto sí es mi carrito">✓</button><button class="no" data-accion="foto-no" ${datos} title="Esta foto no es mi carrito (se oculta)">✗</button>`;
+    : a.otraVersion
+    ? `<span class="chip morado">≈ otra versión</span><button data-accion="foto-quitar" ${datos} title="Quitar">↺</button>`
+    : `<button class="si" data-accion="foto-si" ${datos} title="Esta foto sí es mi carrito">✓</button><button class="ver" data-accion="foto-version" ${datos} title="Mismo carrito pero otro color o año: solo como idea de precio">≈</button><button class="no" data-accion="foto-no" ${datos} title="Esta foto no es mi carrito (se oculta)">✗</button>`;
   const link = a.url ? ` <a href="${esc(a.url)}" target="_blank" rel="noopener">Facebook ↗</a>` : '';
   const datosTarjeta = [a.numero ? `<b class="num">${esc(a.numero)}</b>` : '', a.serie ? esc(a.serie) : ''].filter(Boolean).join(' · ');
   const marcas = [
+    a.nuevo ? '<span class="chip nuevo">nuevo</span>' : '',
     a.mismoNumero ? '<span class="chip verde">✓ mismo número</span>' : '',
     a.otroNumero ? '<span class="chip ambar">otro número</span>' : '',
     a.especial ? '<span class="chip oro">★ especial</span>' : '',
@@ -221,7 +405,7 @@ function htmlAvistamiento(a, c) {
     a.posiciones ? `pos. ${esc(a.posiciones)}` : '',
     a.cantidad > 1 ? `${a.cantidad} pzas` : '',
   ].filter(Boolean).join(' · ');
-  return `<div class="av ${a.fotoConfirmada ? 'confirmada' : ''}">${img}<div><b>${dinero(a.precio)}</b><br>${esc(a.vendedor)} · ${fecha(a.fecha)}${extra ? '<br>' + extra : ''}${datosTarjeta ? '<br><span class="datos-tarjeta">' + datosTarjeta + '</span>' : ''}${marcas ? '<br>' + marcas : ''}${a.dudoso ? ' <span class="chip ambar" title="' + esc(a.notas) + '">dudoso</span>' : ''}<div class="av-botones">${botones}${link}</div></div></div>`;
+  return `<div class="av ${a.fotoConfirmada ? 'confirmada' : a.otraVersion ? 'version' : ''} ${a.nuevo ? 'nueva' : ''}">${img}<div><b>${dinero(a.precio)}</b><br>${esc(a.vendedor)} · ${fecha(a.fecha)}${extra ? '<br>' + extra : ''}${datosTarjeta ? '<br><span class="datos-tarjeta">' + datosTarjeta + '</span>' : ''}${marcas ? '<br>' + marcas : ''}${a.dudoso ? ' <span class="chip ambar" title="' + esc(a.notas) + '">dudoso</span>' : ''}<div class="av-botones">${botones}${link}</div></div></div>`;
 }
 
 function htmlCandidato(c, desdeBusqueda = false) {
@@ -253,16 +437,27 @@ function htmlTarjeta(p) {
     c.arriba ? '<span class="chip azul">arriba de la base</span>' : '',
     p.estado?.estado === 'guardado' ? `<span class="chip verde">guardado ${p.estado.precioAnterior != null ? 'antes ' + dinero(p.estado.precioAnterior) : ''}</span>` : '',
     p.estado?.estado === 'saltado' ? '<span class="chip gris">saltado</span>' : '',
+    c.novedad ? `<span class="chip nuevo">🔔 ${novedades(p).length} ${novedades(p).length === 1 ? 'precio nuevo' : 'precios nuevos'}</span>` : '',
     p.agotado ? '<span class="chip gris">agotado</span>' : '',
     ...(p.cotizado || []).map((x) => `<span class="chip oro">⭐ ${esc(x)}</span>`),
   ].join('');
   const img = p.imagen ? `${p.imagen}?w=500&fit=max` : '';
-  return `<article class="tarjeta ${c.revisado ? 'hecha' : ''}" data-id="${esc(p._id)}">
+  return `<article class="tarjeta ${c.revisado && !c.novedad ? 'hecha' : ''}" data-id="${esc(p._id)}">
     <div class="mio">
       ${img ? `<img src="${esc(img)}" loading="lazy" alt="" data-grande="${esc(p.imagen)}" data-pie="${esc(p.titulo)}">` : '<div class="vacio">sin foto</div>'}
       <div class="titulo">${esc(p.titulo)}</div>
       <div class="meta">${esc(p.categoria || p.departamento)}${p.cantidadDisponible != null ? ' · stock ' + p.cantidadDisponible : ''}${p.numero ? ' · número <b>' + esc(p.numero) + '</b>' : ''}</div>
       <div class="precio-actual">${p.precio ? dinero(p.precio) : '<span class="sin-precio">SIN PRECIO</span>'}</div>
+      ${(() => {
+        const nv = novedades(p);
+        const mio = p.precio || p.estado?.precio;
+        if (!nv.length || !mio) return '';
+        const pr = nv.map((a) => a.precio), min = Math.min(...pr), max = Math.max(...pr);
+        const rango = min === max ? dinero(min) : `${dinero(min)} – ${dinero(max)}`;
+        const veredicto = mio > max ? '<span class="arriba">estás arriba</span>' : mio < min ? '<span class="debajo">estás abajo</span>' : '<span class="igual">estás dentro</span>';
+        return `<div class="novedad">Tú: <b>${dinero(mio)}</b> · nuevos: <b>${rango}</b> → ${veredicto}</div>`;
+      })()}
+      ${(() => { const v = refVersion(p); return v ? `<div class="ref-version">≈ Otra versión: ${v.min === v.max ? dinero(v.min) : dinero(v.min) + ' – ' + dinero(v.max)} (${v.n})</div>` : ''; })()}
       <div>${chips}</div>
     </div>
     <div>
@@ -275,6 +470,7 @@ function htmlTarjeta(p) {
       <div class="acciones">
         <input type="number" min="1" step="1" placeholder="Precio" value="${p.precio ?? ''}" data-precio>
         <button class="primario" data-accion="guardar">Guardar precio</button>
+        ${c.novedad ? '<button data-accion="visto" title="Dejo mi precio igual: quitar de Novedades">Visto</button>' : ''}
         ${c.revisado ? '<button data-accion="pendiente">Marcar pendiente</button>' : '<button data-accion="saltar">Saltar</button>'}
       </div>
     </div>
@@ -307,10 +503,46 @@ const visor = (() => {
   let base = { w: 0, h: 0 }, s = 1, tx = 0, ty = 0;
   const MIN = 1, MAX = 8;
 
+  const marcas = $('.visor-marcas', raiz);
   function aplicar() {
     img.style.width = base.w + 'px';
     img.style.height = base.h + 'px';
     img.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+    marcas.style.width = base.w + 'px';
+    marcas.style.height = base.h + 'px';
+    marcas.style.transform = img.style.transform;
+  }
+  // Resaltar la posición: se estima la cuadrícula (columnas × renglones) con cuántos carritos trae la foto
+  // y su forma; las tarjetas son verticales (~0.72 de ancho por alto). Las posiciones van en orden de lectura.
+  let resaltar = true;
+  try { resaltar = localStorage.getItem('visorResaltar') !== '0'; } catch {}
+  function cuadricula(n, w, h) {
+    let mejor = { c: n, r: 1, d: Infinity };
+    for (let c = 1; c <= n; c++) {
+      const r = Math.ceil(n / c);
+      if (c * r - n >= Math.min(c, r)) continue; // demasiados huecos
+      const d = Math.abs(Math.log((w / c) / (h / r) / 0.72));
+      if (d < mejor.d) mejor = { c, r, d };
+    }
+    return mejor;
+  }
+  function pintarMarcas(f) {
+    const b = $('[data-v=resaltar]', raiz);
+    const aplica = !!(f && f.pos?.length && f.total > 1 && f.pos.every((p) => p <= f.total));
+    b.hidden = !aplica;
+    b.textContent = `Resaltar: ${resaltar ? 'sí' : 'no'}`;
+    marcas.innerHTML = '';
+    marcas.hidden = !(aplica && resaltar);
+    if (!aplica || !resaltar) return;
+    const { c, r } = cuadricula(f.total, img.naturalWidth || 4, img.naturalHeight || 3);
+    for (const p of f.pos) {
+      const fila = Math.floor((p - 1) / c), col = (p - 1) % c;
+      const caja = document.createElement('div');
+      caja.className = 'marca-pos' + (f.pos.length === 1 ? ' sola' : '');
+      Object.assign(caja.style, { left: `${(col / c) * 100}%`, top: `${(fila / r) * 100}%`, width: `${100 / c}%`, height: `${100 / r}%` });
+      caja.innerHTML = `<span>pos. ${p}</span>`;
+      marcas.appendChild(caja);
+    }
   }
   function limitar() {
     const W = lienzo.clientWidth, H = lienzo.clientHeight;
@@ -336,19 +568,78 @@ const visor = (() => {
     aplicar();
   }
   const centro = () => [lienzo.clientWidth / 2, lienzo.clientHeight / 2];
+  let opciones = {};
+  let ocupado = false;
+  function pintarDecision(f) {
+    const decidible = !!(f.clave && opciones.decidir);
+    const decidida = f.ok || f.ver;
+    $('[data-v=si]', raiz).hidden = !decidible || decidida;
+    $('[data-v=no]', raiz).hidden = !decidible || decidida;
+    $('[data-v=version]', raiz).hidden = !decidible || decidida;
+    $('.visor-ok', raiz).hidden = !(decidible && f.ok);
+    $('.visor-ver', raiz).hidden = !(decidible && f.ver);
+    $('[data-v=deshacer]', raiz).hidden = !(decidible && decidida);
+  }
+  async function decidir(accion) {
+    const f = fotos[idx];
+    if (ocupado || !f?.clave || !opciones.decidir) return;
+    ocupado = true;
+    try {
+      await opciones.decidir(f, accion);
+      if (accion === 'no') {
+        fotos.splice(idx, 1); // se oculta y pasa a la siguiente
+        if (!fotos.length) return cerrar();
+        mostrar(idx);
+      } else {
+        f.ok = accion === 'si';
+        f.ver = accion === 'version';
+        pintarDecision(f);
+      }
+    } catch (err) {
+      aviso(err.message, true);
+    } finally {
+      ocupado = false;
+    }
+  }
   function mostrar(i) {
     idx = (i + fotos.length) % fotos.length;
     const f = fotos[idx];
+    const para = $('.visor-para', raiz);
+    para.innerHTML = f.para ? `Tu carrito:<b>${esc(f.para)}</b>` : '';
+    para.hidden = !f.para;
+    pintarDecision(f);
     pie.textContent = f.pie + (fotos.length > 1 ? `  (${idx + 1} de ${fotos.length})` : '');
     const fb = $('[data-v=facebook]', raiz);
     fb.hidden = !f.url;
     if (f.url) fb.href = f.url;
     $('[data-v=prev]', raiz).disabled = $('[data-v=next]', raiz).disabled = fotos.length < 2;
     img.style.visibility = 'hidden';
-    img.onload = () => { ajustar(); img.style.visibility = 'visible'; };
-    img.src = f.src;
+    marcas.hidden = true;
+    const listo = () => { ajustar(); pintarMarcas(f); img.style.visibility = 'visible'; };
+    // si es la misma imagen (otra posición de la misma foto), el navegador no vuelve a disparar "load"
+    if (img.getAttribute('src') === f.src && img.complete && img.naturalWidth) { img.onload = null; listo(); }
+    else { img.onload = listo; img.src = f.src; }
   }
-  function abrir(lista, i) {
+  // Mostrar u ocultar tu carrito (se recuerda en este navegador)
+  let verMio = true;
+  try { verMio = localStorage.getItem('visorMio') !== '0'; } catch {}
+  function pintarMio() {
+    const hay = !!opciones.mio;
+    raiz.classList.toggle('con-mio', hay && verMio);
+    const b = $('[data-v=mio]', raiz);
+    b.hidden = !hay;
+    b.textContent = verMio ? 'Ocultar mi carrito' : 'Ver mi carrito';
+  }
+  function abrir(lista, i, opc = {}) {
+    opciones = opc;
+    if (opc.mio) {
+      $('.visor-mio img', raiz).src = opc.mio.src;
+      $('.visor-mio-titulo', raiz).textContent = opc.mio.titulo;
+      const precio = $('.visor-mio-precio', raiz);
+      precio.textContent = opc.mio.precio || '';
+      precio.classList.toggle('sin', /sin precio/i.test(opc.mio.precio || ''));
+    }
+    pintarMio();
     fotos = lista;
     raiz.hidden = false;
     document.body.style.overflow = 'hidden';
@@ -370,12 +661,29 @@ const visor = (() => {
 
   // arrastrar para moverse; clic en el fondo (sin arrastrar) cierra
   let arrastre = null;
+  // dos dedos (iPhone): pellizcar para acercar
+  const dedos = new Map();
+  let pellizco = null;
   lienzo.addEventListener('pointerdown', (e) => {
+    dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (dedos.size === 2) {
+      const [a, b] = [...dedos.values()];
+      pellizco = { d: Math.hypot(a.x - b.x, a.y - b.y), s };
+      arrastre = null;
+      return;
+    }
     arrastre = { x: e.clientX, y: e.clientY, tx, ty, movio: false, enFoto: e.target === img };
     lienzo.setPointerCapture(e.pointerId);
     lienzo.classList.add('arrastrando');
   });
   lienzo.addEventListener('pointermove', (e) => {
+    if (dedos.has(e.pointerId)) dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pellizco && dedos.size === 2) {
+      const [a, b] = [...dedos.values()];
+      const r = lienzo.getBoundingClientRect();
+      zoomEn(pellizco.s * (Math.hypot(a.x - b.x, a.y - b.y) / pellizco.d), (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      return;
+    }
     if (!arrastre) return;
     const dx = e.clientX - arrastre.x, dy = e.clientY - arrastre.y;
     if (Math.abs(dx) + Math.abs(dy) > 4) arrastre.movio = true;
@@ -384,7 +692,24 @@ const visor = (() => {
     limitar();
     aplicar();
   });
-  lienzo.addEventListener('pointerup', () => {
+  const soltar = (e) => {
+    dedos.delete(e.pointerId);
+    if (dedos.size < 2) pellizco = null;
+  };
+  lienzo.addEventListener('pointercancel', soltar);
+  lienzo.addEventListener('pointerup', (e) => {
+    const eraPellizco = !!pellizco || dedos.size > 1;
+    soltar(e);
+    if (eraPellizco) { arrastre = null; return; }
+    // doble toque en la foto (iPhone): acercar / ver completa
+    if (arrastre && !arrastre.movio && arrastre.enFoto && e.pointerType === 'touch') {
+      const ahora = Date.now();
+      if (ahora - (lienzo._ultimoToque || 0) < 300) {
+        const r = lienzo.getBoundingClientRect();
+        if (s > 1.05) ajustar(); else zoomEn(2.5, e.clientX - r.left, e.clientY - r.top);
+        lienzo._ultimoToque = 0;
+      } else lienzo._ultimoToque = ahora;
+    }
     if (arrastre && !arrastre.movio && !arrastre.enFoto) cerrar();
     arrastre = null;
     lienzo.classList.remove('arrastrando');
@@ -405,6 +730,21 @@ const visor = (() => {
     if (v === 'menos') zoomEn(s / 1.5, ...centro());
     if (v === 'ajustar') ajustar();
     if (v === 'cerrar') cerrar();
+    if (v === 'si') decidir('si');
+    if (v === 'no') decidir('no');
+    if (v === 'version') decidir('version');
+    if (v === 'deshacer') decidir('quitar');
+    if (v === 'resaltar') {
+      resaltar = !resaltar;
+      try { localStorage.setItem('visorResaltar', resaltar ? '1' : '0'); } catch {}
+      pintarMarcas(fotos[idx]);
+    }
+    if (v === 'mio') {
+      verMio = !verMio;
+      try { localStorage.setItem('visorMio', verMio ? '1' : '0'); } catch {}
+      pintarMio();
+      ajustar();
+    }
   });
   document.addEventListener('keydown', (e) => {
     if (raiz.hidden) return;
@@ -414,6 +754,10 @@ const visor = (() => {
     else if (e.key === '+' || e.key === '=') zoomEn(s * 1.5, ...centro());
     else if (e.key === '-') zoomEn(s / 1.5, ...centro());
     else if (e.key === '0') ajustar();
+    else if (e.key === 'r' || e.key === 'R') { if (!$('[data-v=resaltar]', raiz).hidden) { resaltar = !resaltar; try { localStorage.setItem('visorResaltar', resaltar ? '1' : '0'); } catch {} pintarMarcas(fotos[idx]); } }
+    else if (e.key === 's' || e.key === 'S') { if (!$('[data-v=si]', raiz).hidden) decidir('si'); }
+    else if (e.key === 'n' || e.key === 'N') { if (!$('[data-v=no]', raiz).hidden) decidir('no'); }
+    else if (e.key === 'v' || e.key === 'V') { if (!$('[data-v=version]', raiz).hidden) decidir('version'); }
     else return;
     e.preventDefault();
   });
@@ -448,14 +792,36 @@ $('#lista').addEventListener('click', async (e) => {
   if (foto) {
     // Galería: todas las fotos de la misma coincidencia (o solo tu foto)
     const grupo = foto.closest('.cand') || foto.closest('.mio');
+    const tarjeta = foto.closest('.tarjeta');
+    const para = $('.titulo', tarjeta)?.textContent || '';
     const imgs = [...grupo.querySelectorAll('img[data-foto], img[data-grande]')];
     visor.abrir(
       imgs.map((im) => ({
-        src: im.dataset.foto ? `/foto/${im.dataset.foto}` : `${im.dataset.grande}?w=1800&fit=max`,
+        src: im.dataset.foto ? `/foto/${im.dataset.foto}?v=${versionBase}` : `${im.dataset.grande}?w=1800&fit=max`,
         pie: im.dataset.pie || '',
         url: im.dataset.url || '',
+        para,
+        id: tarjeta.dataset.id,
+        key: im.dataset.key || '',
+        clave: im.dataset.clave || '', // solo las fotos de la base se pueden decidir (no tu propia foto)
+        score: im.dataset.score ? Number(im.dataset.score) : null,
+        ok: im.dataset.ok === '1',
+        ver: im.dataset.ver === '1',
+        pos: String(im.dataset.pos || '').split(/[,\s]+/).map(Number).filter((n) => n > 0),
+        total: Number(im.dataset.total || 0),
       })),
-      imgs.indexOf(foto)
+      imgs.indexOf(foto),
+      {
+        decidir: decidirFoto,
+        // tu carrito al lado, solo cuando abres una foto del vendedor
+        mio: grupo.classList.contains('cand') && $('.mio img[data-grande]', tarjeta)
+          ? {
+              src: `${$('.mio img[data-grande]', tarjeta).dataset.grande}?w=900&fit=max`,
+              titulo: para,
+              precio: $('.precio-actual', tarjeta)?.textContent.trim() || '',
+            }
+          : null,
+      }
     );
     return;
   }
@@ -472,10 +838,11 @@ $('#lista').addEventListener('click', async (e) => {
       const r = await api('/api/equivalencia', { id, key: b.dataset.key, accion, score });
       reemplazarTarjeta(r.producto);
       if (accion === 'confirmar') aviso('Coincidencia confirmada');
-    } else if (accion === 'foto-si' || accion === 'foto-no' || accion === 'foto-quitar') {
+    } else if (accion === 'foto-si' || accion === 'foto-no' || accion === 'foto-quitar' || accion === 'foto-version') {
       const r = await api('/api/foto', { id, key: b.dataset.key, clave: b.dataset.clave, accion: accion.slice(5), score });
       reemplazarTarjeta(r.producto);
       if (accion === 'foto-no') aviso('Foto oculta para este carrito');
+      if (accion === 'foto-version') aviso('Marcada como otra versión (solo de guía)');
     } else if (accion === 'buscar') {
       const q = $('[data-buscar]', tarjeta).value.trim();
       if (!q) return;
@@ -491,6 +858,10 @@ $('#lista').addEventListener('click', async (e) => {
       const r = await api('/api/precio', { id, precio: valor });
       reemplazarTarjeta(r.producto);
       aviso(`Guardado: ${dinero(valor)} (haz deploy para verlo en el sitio)`);
+    } else if (accion === 'visto') {
+      const r = await api('/api/visto', { id });
+      reemplazarTarjeta(r.producto);
+      aviso('Listo: tu precio se queda igual');
     } else if (accion === 'saltar' || accion === 'pendiente') {
       const r = await api('/api/estado', { id, valor: accion === 'saltar' ? 'saltado' : null });
       reemplazarTarjeta(r.producto);
@@ -502,16 +873,172 @@ $('#lista').addEventListener('click', async (e) => {
   }
 });
 
+/** Decisión sobre una foto desde el visor (✓ / ✗ / ↺): mismo efecto que los botones de la tarjeta. */
+async function decidirFoto(item, accion) {
+  const r = await api('/api/foto', { id: item.id, key: item.key, clave: item.clave, accion, score: item.score });
+  reemplazarTarjeta(r.producto);
+  if (accion === 'no') aviso('Foto oculta para este carrito');
+  if (accion === 'si') aviso('Confirmado: es tu carrito');
+  if (accion === 'version') aviso('Marcada como otra versión (solo de guía)');
+}
+
+// ---------- álbumes: agregar, avance e historial ----------
+const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+let historial = { grupos: [], vendedores: [] };
+
+function abrirVentana(id) { $(id).hidden = false; }
+function cerrarVentanas() { document.querySelectorAll('.ventana-fondo').forEach((v) => (v.hidden = true)); }
+document.querySelectorAll('.ventana-fondo').forEach((v) =>
+  v.addEventListener('click', (e) => { if (e.target === v || e.target.closest('[data-cerrar]')) cerrarVentanas(); })
+);
+
+async function cargarHistorial() {
+  historial = await api('/api/albumes');
+  $('#a-vendedor').innerHTML =
+    historial.vendedores.map((v) => `<option>${esc(v)}</option>`).join('') + '<option value="__nuevo">➕ Nuevo vendedor…</option>';
+  $('#lista-albumes').innerHTML = historial.grupos.length
+    ? historial.grupos.map((g) => `<div class="grupo-vendedor">
+        <h3>${esc(g.vendedor)} <button type="button" data-agregar="${esc(g.vendedor)}">➕ Álbum</button></h3>
+        ${g.albumes.length ? g.albumes.map((a) => `<div class="album-fila"><span>${fecha(a.fecha) || esc(a.nombre)} · <code>${esc(a.nombre)}</code></span><span>${a.filas} precios${a.revisar ? ` · ${a.revisar} por revisar` : ''}</span></div>`).join('') : '<div class="album-fila">Sin álbumes todavía</div>'}
+      </div>`).join('')
+    : '<div class="vacio">Todavía no hay álbumes.</div>';
+}
+
+function actualizarNombreAlbum() {
+  const nuevo = $('#a-vendedor').value === '__nuevo';
+  $('#a-nuevo').hidden = !nuevo;
+  const vendedor = nuevo ? $('#a-nuevo').value : $('#a-vendedor').value;
+  const f = $('#a-fecha').value;
+  if (nuevo) $('#a-prueba').checked = true;
+  if (!vendedor || !f) { $('#a-nombre').textContent = ''; return; }
+  const [, m, d] = f.split('-').map(Number);
+  const nombre = `${slug(vendedor)}-${MESES_CORTOS[m - 1]}${d}`;
+  const existe = historial.grupos.some((g) => g.albumes.some((a) => a.nombre === nombre));
+  $('#a-nombre').innerHTML = `Se guardará como <b>${esc(nombre)}</b>${existe ? ' · <span style="color:var(--rojo)">ya existe: se reemplazaría</span>' : ''}`;
+}
+['#a-vendedor', '#a-nuevo', '#a-fecha'].forEach((id) => $(id).addEventListener('input', actualizarNombreAlbum));
+$('#a-vendedor').addEventListener('change', actualizarNombreAlbum);
+
+async function abrirAgregar(vendedor) {
+  $('#a-error').textContent = '';
+  if (!$('#a-fecha').value) $('#a-fecha').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  abrirVentana('#v-agregar');
+  try { await cargarHistorial(); } catch (e) { $('#a-error').textContent = e.message; }
+  if (vendedor) $('#a-vendedor').value = vendedor;
+  $('#a-prueba').checked = false;
+  actualizarNombreAlbum();
+  $('#a-url').focus();
+}
+$('#btn-agregar').addEventListener('click', () => abrirAgregar());
+$('#btn-albumes').addEventListener('click', async () => {
+  abrirVentana('#v-albumes');
+  try { await cargarHistorial(); } catch (e) { $('#lista-albumes').textContent = e.message; }
+});
+$('#lista-albumes').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-agregar]');
+  if (b) { cerrarVentanas(); abrirAgregar(b.dataset.agregar); }
+});
+
+$('#f-agregar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#a-error').textContent = '';
+  const nuevo = $('#a-vendedor').value === '__nuevo';
+  const cuerpo = {
+    url: $('#a-url').value.trim(),
+    vendedor: (nuevo ? $('#a-nuevo').value : $('#a-vendedor').value).trim(),
+    fecha: $('#a-fecha').value,
+    prueba: $('#a-prueba').checked,
+  };
+  const enviar = async (extra = {}) => {
+    const r = await fetch('/api/album', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...cuerpo, ...extra }) });
+    return { ok: r.ok, datos: await r.json() };
+  };
+  let r = await enviar();
+  if (!r.ok && r.datos.repetido) {
+    if (!confirm(r.datos.error + '\n\n¿Correrlo de nuevo?')) return;
+    r = await enviar({ confirmarRepetido: true });
+  }
+  if (!r.ok) { $('#a-error').textContent = r.datos.error || 'No se pudo iniciar'; return; }
+  cerrarVentanas();
+  $('#a-url').value = '';
+  iniciarAvance();
+});
+
+// Panel de avance
+let lineasVistas = 0, sondeo = null;
+function iniciarAvance() {
+  lineasVistas = 0;
+  $('#av-log').textContent = '';
+  $('#avance').hidden = false;
+  clearInterval(sondeo);
+  sondeo = setInterval(revisarAvance, 1500);
+  revisarAvance();
+}
+async function revisarAvance() {
+  let t;
+  try { t = await api(`/api/album/estado?desde=${lineasVistas}`); } catch { return; }
+  if (!t.album) { clearInterval(sondeo); return; }
+  $('#avance').hidden = false;
+  if (t.lineas.length) {
+    const pre = $('#av-log');
+    pre.textContent += (pre.textContent ? '\n' : '') + t.lineas.join('\n');
+    lineasVistas = t.total;
+    pre.scrollTop = pre.scrollHeight;
+  }
+  $('#av-login').hidden = !t.esperandoLogin;
+  const titulo = t.prueba ? `Prueba de 3 fotos (${t.vendedor})` : t.album;
+  if (t.activo) {
+    $('#av-titulo').textContent = `⏳ ${titulo}…`;
+    $('#av-detener').hidden = false;
+    $('#av-recargar').hidden = true;
+    $('#av-cerrar').hidden = true;
+  } else {
+    clearInterval(sondeo);
+    const ok = t.codigo === 0;
+    $('#av-titulo').textContent = `${ok ? '✅' : '⚠️'} ${titulo}: ${ok ? 'listo' : 'terminó con error'}${t.costo != null ? ` · ≈ $${t.costo} MXN` : ''}`;
+    $('#av-detener').hidden = true;
+    $('#av-recargar').hidden = !(ok && !t.prueba);
+    $('#av-cerrar').hidden = false;
+  }
+}
+$('#av-ver').addEventListener('click', () => {
+  const pre = $('#av-log');
+  pre.classList.toggle('oculto');
+  $('#av-ver').textContent = pre.classList.contains('oculto') ? 'Ver detalle' : 'Ocultar detalle';
+});
+$('#av-detener').addEventListener('click', async () => {
+  if (confirm('¿Detener el álbum? Se guarda lo que lleve.')) await api('/api/album/detener', {});
+});
+$('#av-continuar').addEventListener('click', () => api('/api/album/continuar', {}));
+$('#av-cerrar').addEventListener('click', () => ($('#avance').hidden = true));
+$('#av-recargar').addEventListener('click', () => location.reload());
+$('#btn-apagar').addEventListener('click', async () => {
+  if (!confirm('¿Apagar la página? Para volver a abrirla usa la app "Precios Carritos".')) return;
+  try { await api('/api/apagar', {}); document.body.innerHTML = '<p style="padding:40px;font:16px system-ui">Página apagada. Ábrela otra vez con la app <b>Precios Carritos</b>.</p>'; }
+  catch (e) { aviso(e.message, true); }
+});
+
 // ---------- inicio ----------
+let versionBase = 0;
 (async () => {
   try {
     const d = await api('/api/datos');
     productos = d.productos;
+    versionBase = d.version || 0;
+    $('#btn-apagar').hidden = !d.local;
+    if (d.iphone?.length) $('#resumen').insertAdjacentHTML('afterend', `<div class="resumen">📱 Desde tu iPhone (mismo Wi-Fi): <b>${d.iphone.map(esc).join(' · ')}</b> · pide tu PIN</div>`);
     const sinPrecio = productos.filter((p) => !p.precio).length;
     $('#resumen').textContent = `${productos.length} productos (${sinPrecio} sin precio) · base: ${d.base.precios} precios de ${d.base.modelos} modelos · vendedores: ${d.vendedores.join(', ')}${d.aprendidos ? ` · ${d.aprendidos} palabras aprendidas` : ''}`;
     const deptos = [...new Set(productos.map((p) => p.departamento))].sort();
     $('#depto').innerHTML += deptos.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
     pintar();
+    // Si hay un álbum procesándose (p. ej. lo iniciaste desde el iPhone), muestra su avance
+    const t = await api('/api/album/estado?desde=0');
+    if (t.activo) {
+      if (matchMedia('(max-width: 760px)').matches) { $('#av-log').classList.add('oculto'); $('#av-ver').textContent = 'Ver detalle'; }
+      iniciarAvance();
+    }
   } catch (err) {
     $('#resumen').textContent = 'Error al cargar: ' + err.message;
   }
