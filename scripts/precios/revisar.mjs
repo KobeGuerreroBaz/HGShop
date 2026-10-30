@@ -21,9 +21,10 @@ import { exec, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { createClient } from '@sanity/client';
 import { crearBuscador, marcaCanonica, tokens, distintivas, numeroDe } from '../../src/lib/emparejar-precios.mjs';
-import { armarBase, leerAlbum, CARPETA_SCRAPER_DEFECTO } from './armar-base.mjs';
+import { armarBase, leerAlbum, CARPETA_SCRAPER_DEFECTO, ARCHIVO_REVISION, claveFila, leerRevision, listarPorRevisar, limpiarUrlFacebook } from './armar-base.mjs';
 
 const PUERTO = 4400;
+const PRECIO_MINIMO_BASE = 30; // igual que armar-base: lo de este precio o menos no entra a la base
 const CARPETA_SCRAPER = process.env.CARPETA_SCRAPER || CARPETA_SCRAPER_DEFECTO;
 const ABRIR_NAVEGADOR = !process.argv.includes('--sin-abrir');
 const DEPARTAMENTOS = ['hot-wheels', 'cars', 'matchbox'];
@@ -84,6 +85,7 @@ const client = createClient({
 let base = leerJson(ARCHIVO_BASE, { precios: [] }).precios;
 let buscador = crearBuscador(base);
 let versionBase = Date.now();
+let baseDesactualizada = false; // hay decisiones de "Por revisar" que aún no se aplican a la base
 
 /** Vuelve a armar la base (después de un álbum nuevo) y recarga el buscador sin reiniciar la página. */
 function recargarBase() {
@@ -219,17 +221,65 @@ const ARCHIVO_VENDEDORES = path.join(SALIDA, 'vendedores.json'); // vendedores d
 const slug = (t) =>
   String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+/** Identificadores de un link de foto de Facebook: el del álbum ("set=pcb.…") y el de la foto ("fbid=…"). */
+function idsDeLink(link) {
+  const s = String(link || '');
+  return { set: (s.match(/[?&]set=([\w.]+)/) || [])[1] || '', fbid: (s.match(/[?&]fbid=(\d+)/) || [])[1] || '' };
+}
+/** Link (limpio) de la primera foto de un álbum ya procesado: lo guardó el scraper en debug/<album>_foto_001.json. */
+function linkDeAlbum(nombre) {
+  const d = leerJson(path.join(CARPETA_SCRAPER, 'debug', `${nombre}_foto_001.json`), {});
+  return limpiarUrlFacebook(d.url || null);
+}
+/**
+ * ¿Este link ya corresponde a un álbum procesado? Compara el id del álbum (o, si el link no lo trae, el de la foto)
+ * contra la primera foto de cada álbum guardado. Sirve aunque hayas escrito otra fecha u otro nombre de vendedor.
+ */
+function albumPorLink(link) {
+  const { set, fbid } = idsDeLink(link);
+  if (!set && !fbid) return null;
+  const maestro = leerJson(ARCHIVO_MAESTRO, { albumes: [], filas: [] });
+  for (const nombre of maestro.albumes || []) {
+    const ids = idsDeLink(linkDeAlbum(nombre));
+    if ((set && ids.set === set) || (fbid && ids.fbid === fbid)) {
+      const filas = (maestro.filas || []).filter((f) => f.album === nombre).length;
+      return { nombre, ...leerAlbum(nombre), filas };
+    }
+  }
+  return null;
+}
+
 /** Álbumes ya procesados, agrupados por vendedor (más reciente primero). */
 function historialAlbumes() {
   const maestro = leerJson(ARCHIVO_MAESTRO, { albumes: [], filas: [] });
   const porAlbum = {};
+  const revision = leerRevision(SALIDA);
   for (const f of maestro.filas || []) {
     const a = (porAlbum[f.album] ||= { filas: 0, revisar: 0, conPrecio: 0 });
     a.filas++;
-    if (f.revisar) a.revisar++;
+    // "por revisar" pendientes: sin decisión tuya y que no sean de $30 o menos (esas la base ya las ignora)
+    const bajo = typeof f.precioUnitario === 'number' && f.precioUnitario <= PRECIO_MINIMO_BASE;
+    if (f.revisar && !bajo && !revision[claveFila(f)]) a.revisar++;
     if (typeof f.precioUnitario === 'number') a.conPrecio++;
   }
-  const albumes = (maestro.albumes || []).map((nombre) => ({ nombre, ...leerAlbum(nombre), ...(porAlbum[nombre] || { filas: 0, revisar: 0 }) }));
+  // Datos extra de cada álbum: fotos leídas (archivos de debug), omitidos y link de Facebook de la primera foto
+  const fotosPorAlbum = {};
+  try {
+    for (const n of fs.readdirSync(path.join(CARPETA_SCRAPER, 'debug'))) {
+      const m = n.match(/^(.+)_foto_\d{3}\.json$/);
+      if (m) fotosPorAlbum[m[1]] = (fotosPorAlbum[m[1]] || 0) + 1;
+    }
+  } catch {}
+  const omitidosPorAlbum = {};
+  for (const o of maestro.omitidos || []) omitidosPorAlbum[o.album] = (omitidosPorAlbum[o.album] || 0) + 1;
+  const albumes = (maestro.albumes || []).map((nombre) => ({
+    nombre,
+    ...leerAlbum(nombre),
+    ...(porAlbum[nombre] || { filas: 0, revisar: 0 }),
+    fotos: fotosPorAlbum[nombre] || 0,
+    omitidos: omitidosPorAlbum[nombre] || 0,
+    url: linkDeAlbum(nombre),
+  }));
   const extra = leerJson(ARCHIVO_VENDEDORES, []);
   const vendedores = [...new Set([...albumes.map((a) => a.vendedor), ...extra])].sort();
   const grupos = vendedores.map((v) => ({
@@ -243,9 +293,10 @@ function historialAlbumes() {
 const trabajo = { activo: false, lineas: [], album: '', prueba: false, inicio: null, fin: null, codigo: null, costo: null, esperandoLogin: false, base: null };
 let proceso = null;
 
-function correrAlbum({ url, vendedor, fecha, prueba }) {
+function correrAlbum({ url, vendedor, fecha, prueba, nombreForzado }) {
   const [anio, mes, dia] = String(fecha).split('-').map(Number);
-  const nombre = `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
+  // nombreForzado: el link ya era de un álbum guardado, así que se reemplaza ese mismo (no se crea una copia con otro nombre)
+  const nombre = nombreForzado || `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
   const args = [path.join(CARPETA_SCRAPER, 'extraer_album.mjs'), prueba ? '3' : '0', url, ...(prueba ? [] : [nombre])];
   Object.assign(trabajo, { activo: true, lineas: [], album: nombre, vendedor, prueba, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
   const agregar = (texto) => {
@@ -353,7 +404,7 @@ const servidor = http.createServer(async (req, res) => {
       return res.end('{"ok":true}');
     }
     if (!tienePin(req)) {
-      if (req.method === 'GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/foto/')) {
+      if (req.method === 'GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/foto/') && !url.pathname.startsWith('/fotoalbum/') && !url.pathname.startsWith('/pantalla/')) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(PAGINA_PIN);
       }
@@ -363,6 +414,66 @@ const servidor = http.createServer(async (req, res) => {
     // --- álbumes ---
     if (req.method === 'GET' && url.pathname === '/api/albumes') {
       return responder(res, 200, historialAlbumes());
+    }
+
+    // --- filas "por revisar" de TODOS los álbumes (lee el maestro, no la base) ---
+    if (req.method === 'GET' && url.pathname === '/api/porrevisar') {
+      const filas = listarPorRevisar({ carpetaScraper: CARPETA_SCRAPER, carpetaSalida: SALIDA, minimo: PRECIO_MINIMO_BASE });
+      const pendientes = filas.filter((f) => !f.decision && !f.bajo).length;
+      return responder(res, 200, { filas, pendientes });
+    }
+    // Foto de una fila (también las que no están en la base). Solo nombres simples de la carpeta de fotos.
+    if (req.method === 'GET' && url.pathname.startsWith('/fotoalbum/')) {
+      const nombre = decodeURIComponent(url.pathname.slice('/fotoalbum/'.length));
+      const archivo = path.join(CARPETA_SCRAPER, 'fotos_hotwheels', nombre);
+      if (!/^[\w.-]+\.(jpe?g|png|webp)$/i.test(nombre) || !fs.existsSync(archivo)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(archivo).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'private, max-age=3600' });
+      return fs.createReadStream(archivo).pipe(res);
+    }
+    // Captura de pantalla de Facebook de una foto (carpeta debug del scraper). Solo nombres simples "<album>_foto_NNN_pantalla.png".
+    if (req.method === 'GET' && url.pathname.startsWith('/pantalla/')) {
+      const nombre = decodeURIComponent(url.pathname.slice('/pantalla/'.length));
+      const archivo = path.join(CARPETA_SCRAPER, 'debug', nombre);
+      if (!/^[\w.-]+_foto_\d{3}_pantalla\.png$/.test(nombre) || !fs.existsSync(archivo)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=3600' });
+      return fs.createReadStream(archivo).pipe(res);
+    }
+    // Decisión sobre una fila: revisada | descartada | corregida | deshacer. Se guarda en scripts/salida/revision-fotos.json
+    if (req.method === 'POST' && url.pathname === '/api/revision') {
+      const { clave, accion, cambios } = await leerCuerpo(req);
+      const acciones = ['revisada', 'descartada', 'corregida', 'deshacer'];
+      if (!acciones.includes(accion)) return responder(res, 400, { error: 'Acción no válida' });
+      const maestro = leerJson(ARCHIVO_MAESTRO, { filas: [] });
+      const fila = (maestro.filas || []).find((f) => f.revisar && claveFila(f) === clave);
+      if (!fila) return responder(res, 404, { error: 'No encuentro esa fila entre las de "por revisar" (¿se volvió a correr el álbum?)' });
+      const archivo = path.join(SALIDA, ARCHIVO_REVISION);
+      const revision = leerRevision(SALIDA);
+      if (accion === 'deshacer') {
+        delete revision[clave];
+      } else {
+        const decision = { accion, fecha: new Date().toISOString() };
+        if (accion === 'corregida') {
+          const c = cambios || {};
+          const texto = (v, max) => String(v ?? '').trim().slice(0, max);
+          const modelo = texto(c.modelo, 120);
+          if (!modelo || modelo.startsWith('(')) return responder(res, 400, { error: 'Falta el nombre del modelo' });
+          const precio = c.precio === '' || c.precio == null ? null : Number(c.precio);
+          if (precio != null && (!Number.isFinite(precio) || precio <= 0 || precio > 100000)) return responder(res, 400, { error: 'Precio inválido' });
+          decision.cambios = { modelo, serie: texto(c.serie, 120), numero: texto(c.numero, 20), precio };
+          decision.antes = { modelo: fila.modelo || '', serie: fila.serie || '', numero: fila.numero || '', precio: typeof fila.precioUnitario === 'number' ? fila.precioUnitario : null };
+        }
+        revision[clave] = decision;
+      }
+      escribirJson(archivo, revision);
+      baseDesactualizada = true;
+      console.log(`  Revisión: ${accion} → ${clave}`);
+      return responder(res, 200, { ok: true });
+    }
+    // Vuelve a armar la base con las decisiones (la página lo pide al cerrar la vista "Por revisar")
+    if (req.method === 'POST' && url.pathname === '/api/revision/aplicar') {
+      if (trabajo.activo) return responder(res, 409, { error: 'Hay un álbum procesándose; aplica los cambios cuando termine' });
+      if (baseDesactualizada) { recargarBase(); baseDesactualizada = false; }
+      return responder(res, 200, { ok: true, precios: base.length });
     }
     if (req.method === 'POST' && url.pathname === '/api/album') {
       const { url: link, vendedor, fecha, prueba, confirmarRepetido } = await leerCuerpo(req);
@@ -374,13 +485,30 @@ const servidor = http.createServer(async (req, res) => {
       if (!process.env.GEMINI_API_KEY) return responder(res, 500, { error: 'Falta GEMINI_API_KEY: abre la página con la app "Precios Carritos" o desde una terminal' });
       const [, mes, dia] = fecha.split('-').map(Number);
       const nombre = `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
-      if (!prueba && historialAlbumes().nombres.includes(nombre) && !confirmarRepetido) {
-        return responder(res, 409, { repetido: true, error: `El álbum "${nombre}" ya existe. Si lo vuelves a correr, se reemplaza.` });
+      // 1) ¿El link ya es de un álbum guardado? (aunque la fecha o el vendedor escritos sean otros). Una prueba de 3 fotos no guarda nada.
+      const igual = prueba ? null : albumPorLink(link);
+      if (igual && !confirmarRepetido) {
+        return responder(res, 409, {
+          repetido: true,
+          error: `Ese link ya está procesado como "${igual.nombre}" (${igual.filas} filas). Si lo vuelves a correr, se reemplaza ese álbum (y se vuelve a pagar Gemini).`,
+        });
       }
-      const vendedores = leerJson(ARCHIVO_VENDEDORES, []);
-      if (!vendedores.includes(vendedor.trim())) escribirJson(ARCHIVO_VENDEDORES, [...vendedores, vendedor.trim()]);
-      const album = correrAlbum({ url: link, vendedor: vendedor.trim(), fecha, prueba: !!prueba });
+      // 2) Mismo nombre pero otro link: se reemplazaría un álbum distinto (p. ej. dos álbumes del mismo vendedor el mismo día)
+      if (!igual && !prueba && historialAlbumes().nombres.includes(nombre) && !confirmarRepetido) {
+        return responder(res, 409, { repetido: true, error: `Ya existe un álbum "${nombre}" pero con OTRO link. Si lo corres, se reemplaza ese álbum. Si es un álbum distinto, cambia la fecha o el vendedor.` });
+      }
+      const vendedorFinal = igual ? leerAlbum(igual.nombre).vendedor : vendedor.trim();
+      if (!igual) {
+        const vendedores = leerJson(ARCHIVO_VENDEDORES, []);
+        if (!vendedores.includes(vendedorFinal)) escribirJson(ARCHIVO_VENDEDORES, [...vendedores, vendedorFinal]);
+      }
+      const album = correrAlbum({ url: link, vendedor: vendedorFinal, fecha: igual?.fecha || fecha, prueba: !!prueba, nombreForzado: igual?.nombre });
       return responder(res, 200, { album });
+    }
+    // ¿Este link ya está procesado? (la página lo consulta mientras pegas el link)
+    if (req.method === 'GET' && url.pathname === '/api/album/link') {
+      const igual = albumPorLink(url.searchParams.get('url') || '');
+      return responder(res, 200, { album: igual });
     }
     if (req.method === 'GET' && url.pathname === '/api/album/estado') {
       const desde = Number(url.searchParams.get('desde') || 0);

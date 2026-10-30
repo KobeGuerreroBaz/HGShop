@@ -63,6 +63,117 @@ export function carritosDelPie(pie) {
   return n;
 }
 
+/** Acepta www., web. y m.facebook.com y lo deja como www. (sin parámetros de redirección). */
+export function limpiarUrlFacebook(url) {
+  return url && /^https:\/\/((www|web|m)\.)?facebook\.com\//.test(url)
+    ? url.replace(/^https:\/\/((web|m)\.)?facebook\.com\//, 'https://www.facebook.com/').replace(/&_rdc=\d+|&_rdr\b/g, '')
+    : null;
+}
+
+/** Lo que guardó el scraper de una foto (debug/<album>_foto_NNN.json): link de Facebook y pie de foto. */
+export function leerDebugFoto(carpetaScraper, album, foto) {
+  const base = `${album}_foto_${String(foto).padStart(3, '0')}`;
+  // Captura de pantalla de Facebook (el scraper la guarda cuando no pudo leer el pie como texto)
+  const pantalla = fs.existsSync(path.join(carpetaScraper, 'debug', `${base}_pantalla.png`)) ? `${base}_pantalla.png` : null;
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(carpetaScraper, 'debug', `${base}.json`), 'utf-8'));
+    return { url: limpiarUrlFacebook(d.url || null), pie: d.pie || '', pantalla };
+  } catch {
+    return { url: null, pie: '', pantalla };
+  }
+}
+
+/** Link de Facebook de una foto. */
+export function linkFacebook(carpetaScraper, album, foto) {
+  return leerDebugFoto(carpetaScraper, album, foto).url;
+}
+
+// ---------- Revisión de filas dudosas ("por revisar") ----------
+// Las decisiones se guardan APARTE de precios_maestro.json (scripts/salida/revision-fotos.json),
+// porque volver a correr un álbum reemplaza sus filas en el maestro y borraría las correcciones.
+// Cada decisión se identifica por álbum + foto + posición, así que sigue aplicando si se vuelve a correr el álbum.
+export const ARCHIVO_REVISION = 'revision-fotos.json';
+
+/** Identificador estable de una fila del maestro: "album|foto|posiciones" (si no hay posiciones, se usa el modelo). */
+export function claveFila(f) {
+  const pos = String(f.posiciones ?? '').trim();
+  return `${f.album}|${f.foto}|${pos || String(f.modelo || '').trim().toLowerCase()}`;
+}
+
+/** { clave: { accion: 'revisada' | 'descartada' | 'corregida', fecha, cambios?: {modelo, serie, numero, precio} } } */
+export function leerRevision(carpetaSalida) {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(carpetaSalida, ARCHIVO_REVISION), 'utf-8'));
+    return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Lo que cambió una corrección, aplicado sobre la fila del maestro (solo campos con valor válido). */
+export function aplicarCambios(f, cambios) {
+  const c = cambios || {};
+  const r = { ...f };
+  if (typeof c.modelo === 'string' && c.modelo.trim()) r.modelo = c.modelo.trim();
+  if (typeof c.serie === 'string') r.serie = c.serie.trim();
+  if (typeof c.numero === 'string') r.numero = c.numero.trim();
+  if (typeof c.precio === 'number' && c.precio > 0) {
+    r.precioUnitario = c.precio;
+    r.precioTotal = c.precio * (f.cantidad || 1);
+  }
+  return r;
+}
+
+/**
+ * Filas marcadas "por revisar" en TODOS los álbumes del maestro, con el estado de su decisión.
+ * Lee el maestro directo (no la base): las filas sin precio o de $30 o menos nunca llegan a la base.
+ */
+export function listarPorRevisar({ carpetaScraper = CARPETA_SCRAPER_DEFECTO, carpetaSalida = path.resolve('scripts/salida'), minimo = 30 } = {}) {
+  const archivo = path.join(path.resolve(carpetaScraper), 'precios_maestro.json');
+  if (!fs.existsSync(archivo)) return [];
+  const maestro = JSON.parse(fs.readFileSync(archivo, 'utf-8'));
+  const revision = leerRevision(path.resolve(carpetaSalida));
+  const fotos = path.join(path.resolve(carpetaScraper), 'fotos_hotwheels');
+  const infoFotos = new Map();
+  // Posición más alta vista en cada foto (igual que en la base): sirve para resaltar la posición en el visor
+  const maxPos = new Map();
+  for (const f of maestro.filas || []) {
+    const pos = String(f.posiciones || '').split(/[,\s]+/).map(Number).filter((n) => n > 0);
+    if (pos.length) maxPos.set(`${f.album}|${f.foto}`, Math.max(maxPos.get(`${f.album}|${f.foto}`) || 0, ...pos));
+  }
+  const lista = [];
+  for (const f of maestro.filas || []) {
+    if (!f.revisar) continue;
+    const clave = claveFila(f);
+    const dec = revision[clave] || null;
+    const k = `${f.album}|${f.foto}`;
+    if (!infoFotos.has(k)) infoFotos.set(k, leerDebugFoto(path.resolve(carpetaScraper), f.album, f.foto));
+    const info = infoFotos.get(k);
+    const precio = typeof f.precioUnitario === 'number' ? f.precioUnitario : null;
+    lista.push({
+      clave,
+      album: f.album,
+      vendedor: leerAlbum(f.album).vendedor,
+      foto: f.foto,
+      posiciones: f.posiciones || '',
+      marca: f.marca || 'Hot Wheels',
+      modelo: f.modelo || '',
+      serie: f.serie || '',
+      numero: f.numero || '',
+      precio,
+      notas: f.notas || '',
+      bajo: precio != null && precio <= Number(minimo), // la base lo ignora
+      archivoFoto: f.archivoFoto && fs.existsSync(path.join(fotos, f.archivoFoto)) ? f.archivoFoto : null,
+      url: info.url,
+      pie: info.pie, // el texto que escribió el vendedor junto a la foto (ahí van los precios)
+      pantalla: info.pantalla, // nombre del archivo de la captura de Facebook, si existe
+      total: Math.max(carritosDelPie(info.pie), maxPos.get(k) || 0), // cuántos carritos trae la foto (0 = no se sabe)
+      decision: dec ? { accion: dec.accion, fecha: dec.fecha || '', cambios: dec.cambios || null } : null,
+    });
+  }
+  return lista;
+}
+
 /** CSV simple con comillas. */
 function leerCsv(texto) {
   const filas = [];
@@ -121,11 +232,7 @@ if (fs.existsSync(archivoMaestro)) {
         url = d.url || null;
         pies.set(k, d.pie || '');
       } catch {}
-      // acepta www., web. y m.facebook.com, y lo deja como www. (sin parámetros de redirección)
-      const limpio = url && /^https:\/\/((www|web|m)\.)?facebook\.com\//.test(url)
-        ? url.replace(/^https:\/\/((web|m)\.)?facebook\.com\//, 'https://www.facebook.com/').replace(/&_rdc=\d+|&_rdr\b/g, '')
-        : null;
-      links.set(k, limpio);
+      links.set(k, limpiarUrlFacebook(url));
     }
     return links.get(k);
   };
@@ -136,7 +243,14 @@ if (fs.existsSync(archivoMaestro)) {
     const pos = String(f.posiciones || '').split(/[,\s]+/).map(Number).filter((n) => n > 0);
     if (pos.length) maxPos.set(k, Math.max(maxPos.get(k) || 0, ...pos));
   }
-  for (const f of maestro.filas || []) {
+  // Decisiones de la vista "Por revisar" (descartar / corregir / revisada), guardadas aparte del maestro
+  const revision = leerRevision(CARPETA_SALIDA);
+  let descartadas = 0, corregidas = 0;
+  for (const filaMaestro of maestro.filas || []) {
+    const decision = filaMaestro.revisar ? revision[claveFila(filaMaestro)] : null;
+    if (decision?.accion === 'descartada') { descartadas++; continue; }
+    const f = decision?.accion === 'corregida' ? aplicarCambios(filaMaestro, decision.cambios) : filaMaestro;
+    if (decision?.accion === 'corregida') corregidas++;
     if (typeof f.precioUnitario !== 'number' || f.precioUnitario <= 0) continue;
     if (f.precioUnitario <= PRECIO_MINIMO) { bajos++; continue; }
     if (!f.modelo || f.modelo.startsWith('(')) continue;
@@ -156,7 +270,7 @@ if (fs.existsSync(archivoMaestro)) {
       especial: !!f.especial,
       cantidad: f.cantidad || 1,
       precio: f.precioUnitario,
-      dudoso: !!f.revisar,
+      dudoso: !!f.revisar && !decision, // ya revisada o corregida = deja de ser dudosa
       notas: f.notas || '',
       archivoFoto: archivoFoto && fs.existsSync(archivoFoto) ? archivoFoto : null,
       url: linkDe(f.album, f.foto),
@@ -167,6 +281,7 @@ if (fs.existsSync(archivoMaestro)) {
     n++;
   }
   resumen.push(`Álbumes (${path.basename(CARPETA_SCRAPER)}): ${n} precios de ${(maestro.albumes || []).length} álbum(es), ${conLink} con link de Facebook`);
+  if (descartadas || corregidas) resumen.push(`Revisión: ${descartadas} fila(s) descartada(s) y ${corregidas} corregida(s) a mano (revision-fotos.json)`);
 } else {
   resumen.push(`[!] No encontré ${archivoMaestro}. Usa --scraper <carpeta> si lo moviste.`);
 }

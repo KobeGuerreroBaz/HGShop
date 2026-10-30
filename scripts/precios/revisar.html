@@ -40,6 +40,10 @@
   .grupo-vendedor { border-top: 1px solid var(--borde); padding: 10px 0; }
   .grupo-vendedor h3 { font-size: 15px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .album-fila { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: var(--suave); }
+  .album-bloque { padding: 2px 0 6px; }
+  .album-detalle { font-size: 12px; color: var(--suave); padding-left: 2px; }
+  .album-detalle a { color: var(--azul); text-decoration: none; }
+  .album-detalle a:hover { text-decoration: underline; }
   /* Panel de avance del álbum */
   #avance { position: fixed; right: 16px; bottom: 16px; width: min(520px, calc(100vw - 32px)); background: #1c1917; color: #f5f5f4; border-radius: 14px; z-index: 12; box-shadow: 0 8px 30px rgba(0,0,0,.3); }
   #avance[hidden] { display: none; }
@@ -172,6 +176,59 @@
     .visor-mio-titulo { text-align: left; font-size: 12px; }
     #visor.con-mio .visor-lienzo { left: 0; top: calc(36px + 25vh); }
   }
+  /* Vista "Por revisar" */
+  .ventana.ancha { width: min(980px, 100%); }
+  .rv-filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .ventana .rv-filtros select { width: auto; max-width: 100%; font-size: 14px; padding: 6px 10px; }
+  .rv-fila { display: flex; gap: 12px; border-top: 1px solid var(--borde); padding: 12px 0; }
+  .rv-fila.hecha { opacity: .7; }
+  .rv-fila img { width: 130px; height: 130px; object-fit: cover; border-radius: 8px; border: 1px solid var(--borde); background: #fafaf9; display: block; }
+  .rv-fila .sinfoto { width: 130px; height: 130px; border-radius: 8px; background: var(--fondo); display: grid; place-items: center; color: var(--suave); font-size: 12px; }
+  .rv-datos { flex: 1; min-width: 0; }
+  .rv-modelo { font-weight: 600; }
+  .rv-precio { font-weight: 700; margin-left: 6px; }
+  .rv-meta { color: var(--suave); font-size: 12px; margin-top: 2px; }
+  .rv-motivo { margin-top: 6px; padding: 5px 8px; border-radius: 8px; background: var(--ambar-claro); color: var(--ambar); font-size: 12px; }
+  .rv-botones { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .rv-botones a { color: var(--azul); font-size: 13px; text-decoration: none; }
+  .rv-edit { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .rv-edit[hidden] { display: none; }
+  .ventana .rv-edit label { margin: 0 0 2px; font-size: 11px; }
+  .ventana .rv-edit input { width: 100%; font-size: 16px; padding: 6px 8px; border: 1px solid var(--borde); border-radius: 8px; }
+  .rv-edit .rv-edit-botones { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  .rv-edit .rv-edit-nota { margin-right: auto; font-size: 11px; color: var(--suave); }
+  button.enlace { border: 0; background: none; color: var(--azul); padding: 0; font-size: inherit; text-decoration: underline; }
+  @media (max-width: 760px) {
+    .rv-fila { flex-direction: column; }
+    .rv-fila img, .rv-fila .sinfoto { width: 100%; height: auto; max-height: 260px; object-fit: contain; }
+    .rv-edit { grid-template-columns: 1fr 1fr; }
+  }
+  /* Visor en modo "Por revisar": el panel de la izquierda muestra los detalles de la fila en vez de "tu carrito" */
+  .visor-detalle { display: none; width: 100%; overflow: auto; max-height: 100%; color: #e7e5e4; font-size: 13px; line-height: 1.5; text-align: left; }
+  #visor.con-detalle .visor-detalle { display: block; }
+  #visor.con-detalle .visor-mio { justify-content: flex-start; align-items: stretch; overflow: auto; }
+  #visor.con-detalle .visor-mio img, #visor.con-detalle .visor-mio .datos { display: none; }
+  .visor-detalle .dt-modelo { font-weight: 700; font-size: 16px; color: #fff; }
+  .visor-detalle .dt-precio { font-weight: 700; font-size: 20px; color: #fff; margin: 2px 0 8px; }
+  .visor-detalle .dt-precio.sin { color: #fca5a5; font-size: 15px; }
+  .visor-detalle div span { color: #a8a29e; display: inline-block; min-width: 64px; }
+  .visor-detalle .dt-estado { color: #86efac; font-weight: 600; margin-bottom: 6px; }
+  .visor-detalle .dt-bajo { color: #fca5a5; margin-top: 6px; }
+  .visor-detalle .dt-motivo { margin-top: 10px; padding: 6px 8px; border-radius: 8px; background: #78350f; color: #fde68a; }
+  .visor-detalle .dt-pie { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #1c1917; border: 1px solid #57534e; }
+  .visor-detalle .dt-pie b { display: block; color: #a8a29e; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .visor-detalle .dt-pie pre { margin: 0; font: 15px/1.4 ui-monospace, Menlo, monospace; color: #fff; white-space: pre-wrap; word-break: break-word; }
+  .visor-detalle .dt-pie .nada { color: #a8a29e; }
+  .rv-que { margin-top: 6px; padding: 5px 8px; border-radius: 8px; background: var(--azul-claro); color: #1e3a8a; font-size: 12px; }
+  .visor-detalle .dt-tipo { margin-top: 2px; }
+  .visor-detalle .dt-que { margin: 6px 0 8px; padding: 6px 8px; border-radius: 8px; background: #1e3a8a; color: #dbeafe; font-size: 12px; }
+  .rv-pie { margin-top: 6px; font-size: 12px; background: var(--fondo); border-radius: 6px; padding: 4px 8px; }
+  .rv-pie b { color: var(--suave); font-weight: 600; }
+  .visor-detalle .dt-antes { margin-top: 8px; color: #a8a29e; font-size: 12px; }
+  @media (max-width: 760px) {
+    #visor.con-detalle .visor-mio { height: 30vh; flex-direction: column; }
+    #visor.con-detalle .visor-lienzo { top: calc(36px + 30vh); }
+  }
   /* iPhone: visor con el pie en su propio renglón y botones completos (va al final para ganarle a los estilos base) */
   @media (max-width: 760px) {
     #visor .visor-barra { height: auto; min-height: 112px; padding: 6px 8px calc(10px + env(safe-area-inset-bottom)); }
@@ -185,6 +242,7 @@
   <div class="cabecera">
     <h1>Carritos · Revisar precios</h1>
     <div class="botones">
+      <button id="btn-revisar" type="button" title="Filas que el scraper dejó dudosas, de todos los álbumes">🔍 Por revisar <span id="rv-n"></span></button>
       <button id="btn-agregar" type="button">➕ Agregar álbum</button>
       <button id="btn-albumes" type="button">📚 Álbumes</button>
       <button id="btn-apagar" type="button" hidden title="Cierra la página en la Mac">⏻ Apagar</button>
@@ -203,7 +261,7 @@
 </main>
 <div id="visor" hidden>
   <div class="visor-para"></div>
-  <div class="visor-mio"><img alt="Tu carrito"><div class="datos"><div class="visor-mio-titulo"></div><div class="visor-mio-precio"></div></div></div>
+  <div class="visor-mio"><img alt="Tu carrito"><div class="datos"><div class="visor-mio-titulo"></div><div class="visor-mio-precio"></div></div><div class="visor-detalle"></div></div>
   <div class="visor-lienzo"><img alt="" draggable="false"><div class="visor-marcas" hidden></div></div>
   <div class="visor-barra">
     <button data-v="prev" title="Anterior (←)">←</button>
@@ -215,6 +273,11 @@
     <span class="visor-ok" hidden>✓ es este</span>
     <span class="visor-ver" hidden>≈ otra versión</span>
     <button data-v="deshacer" hidden title="Quitar la decisión">↺</button>
+    <button data-v="rv-ok" class="si" hidden title="La fila está bien tal cual: pasa a la siguiente (tecla S)">✓ Está bien</button>
+    <button data-v="rv-editar" hidden title="Corregir modelo, serie, número o precio en la lista (tecla E)">✎ Corregir</button>
+    <button data-v="rv-descartar" class="no" hidden title="Descartar esta fila: no entra a la base (tecla N)">🗑 Descartar</button>
+    <button data-v="rv-deshacer" hidden title="Quitar la decisión de esta fila">↺ Deshacer</button>
+    <button data-v="rv-pantalla" hidden title="Alternar entre la foto y la captura de Facebook con el pie de foto (tecla C)">Ver captura de Facebook</button>
     <button data-v="mio" hidden title="Mostrar u ocultar la foto de tu carrito">Ocultar mi carrito</button>
     <button data-v="resaltar" hidden title="Resaltar dónde está el carrito en la foto (tecla R)">Resaltar: sí</button>
     <span class="visor-sep"></span>
@@ -230,6 +293,7 @@
     <h2>➕ Agregar álbum de carritos</h2>
     <label for="a-url">Link de la PRIMERA foto del álbum (Facebook)</label>
     <input id="a-url" type="url" placeholder="https://www.facebook.com/photo/?fbid=…&set=pcb.…" required>
+    <div class="ayuda" id="a-link-aviso" style="color:var(--rojo)"></div>
     <label for="a-vendedor">Vendedor</label>
     <select id="a-vendedor"></select>
     <input id="a-nuevo" type="text" placeholder="Nombre del vendedor nuevo (ej. Alain Rodriguez)" hidden style="margin-top:6px">
@@ -246,6 +310,21 @@
   </form>
 </div>
 
+<div class="ventana-fondo" id="v-revisar" hidden>
+  <div class="ventana ancha">
+    <h2>🔍 Filas por revisar</h2>
+    <div class="ayuda" id="rv-resumen"></div>
+    <div class="rv-filtros">
+      <select id="rv-album"></select>
+      <select id="rv-tipo"></select>
+      <select id="rv-ver"><option value="pendientes">Pendientes</option><option value="resueltas">Ya resueltas</option></select>
+      <label class="chequeo"><input type="checkbox" id="rv-bajos"> Mostrar las de $30 o menos (la base las ignora)</label>
+    </div>
+    <div id="rv-lista"></div>
+    <div class="fila"><button type="button" class="primario" id="rv-cerrar">Cerrar y aplicar</button></div>
+  </div>
+</div>
+
 <div class="ventana-fondo" id="v-albumes" hidden>
   <div class="ventana">
     <h2>📚 Álbumes procesados</h2>
@@ -258,6 +337,7 @@
   <div class="cab">
     <b id="av-titulo">Procesando…</b>
     <div class="botones">
+      <button type="button" id="av-copiar" title="Copia todo el texto del recuadro">Copiar log</button>
       <button type="button" id="av-ver">Ocultar detalle</button>
       <button type="button" id="av-detener">Detener</button>
       <button type="button" id="av-recargar" hidden>Ver precios nuevos</button>
@@ -601,13 +681,53 @@ const visor = (() => {
       ocupado = false;
     }
   }
-  function mostrar(i) {
+  // Modo "Por revisar": botones para decidir sobre la fila sin cerrar el visor
+  function pintarRevision(f) {
+    const rev = !!opciones.revision;
+    const resuelta = rev && !!f.resuelta;
+    $('[data-v=rv-ok]', raiz).hidden = !rev || resuelta;
+    $('[data-v=rv-editar]', raiz).hidden = !rev || resuelta;
+    $('[data-v=rv-descartar]', raiz).hidden = !rev || resuelta;
+    $('[data-v=rv-deshacer]', raiz).hidden = !(rev && resuelta);
+    // Captura de Facebook (si el scraper la guardó): se alterna con la foto
+    const cap = $('[data-v=rv-pantalla]', raiz);
+    cap.hidden = !(rev && f.srcAlt);
+    cap.textContent = f.mostrandoAlt ? 'Ver la foto' : 'Ver captura de Facebook';
+    if (opciones.detalle) $('.visor-detalle', raiz).innerHTML = f.detalle || '';
+  }
+  function alternarCaptura() {
+    const f = fotos[idx];
+    if (!f?.srcAlt) return;
+    f.mostrandoAlt = !f.mostrandoAlt;
+    mostrar(idx, true);
+  }
+  async function revisionAccion(accion) {
+    const f = fotos[idx];
+    if (ocupado || !f || !opciones.revision) return;
+    ocupado = true;
+    try {
+      const r = await opciones.revision(f, accion);
+      if (r === false) return; // no se pudo guardar: la página ya avisó
+      if (accion === 'editar') return cerrar(); // la corrección se hace en el formulario de la lista
+      fotos.splice(idx, 1); // la fila ya no es de esta vista: pasa a la siguiente
+      if (!fotos.length) return cerrar();
+      mostrar(idx);
+    } catch (err) {
+      aviso(err.message, true);
+    } finally {
+      ocupado = false;
+    }
+  }
+  function mostrar(i, conservarCaptura = false) {
     idx = (i + fotos.length) % fotos.length;
     const f = fotos[idx];
+    if (!conservarCaptura) f.mostrandoAlt = false; // al cambiar de fila se empieza viendo la foto
+    const src = f.mostrandoAlt && f.srcAlt ? f.srcAlt : f.src;
     const para = $('.visor-para', raiz);
     para.innerHTML = f.para ? `Tu carrito:<b>${esc(f.para)}</b>` : '';
     para.hidden = !f.para;
     pintarDecision(f);
+    pintarRevision(f);
     pie.textContent = f.pie + (fotos.length > 1 ? `  (${idx + 1} de ${fotos.length})` : '');
     const fb = $('[data-v=facebook]', raiz);
     fb.hidden = !f.url;
@@ -615,20 +735,21 @@ const visor = (() => {
     $('[data-v=prev]', raiz).disabled = $('[data-v=next]', raiz).disabled = fotos.length < 2;
     img.style.visibility = 'hidden';
     marcas.hidden = true;
-    const listo = () => { ajustar(); pintarMarcas(f); img.style.visibility = 'visible'; };
+    const listo = () => { ajustar(); pintarMarcas(f.mostrandoAlt ? null : f); img.style.visibility = 'visible'; }; // el cuadro de posición solo va sobre la foto
     // si es la misma imagen (otra posición de la misma foto), el navegador no vuelve a disparar "load"
-    if (img.getAttribute('src') === f.src && img.complete && img.naturalWidth) { img.onload = null; listo(); }
-    else { img.onload = listo; img.src = f.src; }
+    if (img.getAttribute('src') === src && img.complete && img.naturalWidth) { img.onload = null; listo(); }
+    else { img.onload = listo; img.src = src; }
   }
   // Mostrar u ocultar tu carrito (se recuerda en este navegador)
   let verMio = true;
   try { verMio = localStorage.getItem('visorMio') !== '0'; } catch {}
   function pintarMio() {
-    const hay = !!opciones.mio;
+    const hay = !!(opciones.mio || opciones.detalle);
     raiz.classList.toggle('con-mio', hay && verMio);
+    raiz.classList.toggle('con-detalle', !!opciones.detalle); // modo "Por revisar": el panel muestra los detalles de la fila
     const b = $('[data-v=mio]', raiz);
     b.hidden = !hay;
-    b.textContent = verMio ? 'Ocultar mi carrito' : 'Ver mi carrito';
+    b.textContent = opciones.detalle ? (verMio ? 'Ocultar detalles' : 'Ver detalles') : (verMio ? 'Ocultar mi carrito' : 'Ver mi carrito');
   }
   function abrir(lista, i, opc = {}) {
     opciones = opc;
@@ -734,6 +855,11 @@ const visor = (() => {
     if (v === 'no') decidir('no');
     if (v === 'version') decidir('version');
     if (v === 'deshacer') decidir('quitar');
+    if (v === 'rv-ok') revisionAccion('ok');
+    if (v === 'rv-editar') revisionAccion('editar');
+    if (v === 'rv-descartar') revisionAccion('descartar');
+    if (v === 'rv-deshacer') revisionAccion('deshacer');
+    if (v === 'rv-pantalla') alternarCaptura();
     if (v === 'resaltar') {
       resaltar = !resaltar;
       try { localStorage.setItem('visorResaltar', resaltar ? '1' : '0'); } catch {}
@@ -755,15 +881,17 @@ const visor = (() => {
     else if (e.key === '-') zoomEn(s / 1.5, ...centro());
     else if (e.key === '0') ajustar();
     else if (e.key === 'r' || e.key === 'R') { if (!$('[data-v=resaltar]', raiz).hidden) { resaltar = !resaltar; try { localStorage.setItem('visorResaltar', resaltar ? '1' : '0'); } catch {} pintarMarcas(fotos[idx]); } }
-    else if (e.key === 's' || e.key === 'S') { if (!$('[data-v=si]', raiz).hidden) decidir('si'); }
-    else if (e.key === 'n' || e.key === 'N') { if (!$('[data-v=no]', raiz).hidden) decidir('no'); }
+    else if (e.key === 's' || e.key === 'S') { if (!$('[data-v=si]', raiz).hidden) decidir('si'); else if (!$('[data-v=rv-ok]', raiz).hidden) revisionAccion('ok'); }
+    else if (e.key === 'n' || e.key === 'N') { if (!$('[data-v=no]', raiz).hidden) decidir('no'); else if (!$('[data-v=rv-descartar]', raiz).hidden) revisionAccion('descartar'); }
+    else if (e.key === 'e' || e.key === 'E') { if (!$('[data-v=rv-editar]', raiz).hidden) revisionAccion('editar'); }
+    else if (e.key === 'c' || e.key === 'C') { if (!$('[data-v=rv-pantalla]', raiz).hidden) alternarCaptura(); }
     else if (e.key === 'v' || e.key === 'V') { if (!$('[data-v=version]', raiz).hidden) decidir('version'); }
     else return;
     e.preventDefault();
   });
   window.addEventListener('resize', () => { if (!raiz.hidden) ajustar(); });
 
-  return { abrir };
+  return { abrir, cerrar };
 })();
 
 // ---------- eventos ----------
@@ -888,7 +1016,11 @@ const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 let historial = { grupos: [], vendedores: [] };
 
 function abrirVentana(id) { $(id).hidden = false; }
-function cerrarVentanas() { document.querySelectorAll('.ventana-fondo').forEach((v) => (v.hidden = true)); }
+function cerrarVentanas() {
+  const habiaRevisar = !$('#v-revisar').hidden;
+  document.querySelectorAll('.ventana-fondo').forEach((v) => (v.hidden = true));
+  if (habiaRevisar) cerrarRevision(); // aplica a la base las decisiones tomadas
+}
 document.querySelectorAll('.ventana-fondo').forEach((v) =>
   v.addEventListener('click', (e) => { if (e.target === v || e.target.closest('[data-cerrar]')) cerrarVentanas(); })
 );
@@ -900,7 +1032,7 @@ async function cargarHistorial() {
   $('#lista-albumes').innerHTML = historial.grupos.length
     ? historial.grupos.map((g) => `<div class="grupo-vendedor">
         <h3>${esc(g.vendedor)} <button type="button" data-agregar="${esc(g.vendedor)}">➕ Álbum</button></h3>
-        ${g.albumes.length ? g.albumes.map((a) => `<div class="album-fila"><span>${fecha(a.fecha) || esc(a.nombre)} · <code>${esc(a.nombre)}</code></span><span>${a.filas} precios${a.revisar ? ` · ${a.revisar} por revisar` : ''}</span></div>`).join('') : '<div class="album-fila">Sin álbumes todavía</div>'}
+        ${g.albumes.length ? g.albumes.map((a) => `<div class="album-bloque"><div class="album-fila"><span>${fecha(a.fecha) || esc(a.nombre)} · <code>${esc(a.nombre)}</code></span><span>${a.filas} precios${a.revisar ? ` · <button type="button" class="enlace" data-revisar="${esc(a.nombre)}">${a.revisar} por revisar</button>` : ''}</span></div><div class="album-detalle">${a.fotos} fotos leídas · ${a.omitidos} omitidos${a.url ? ` · <a href="${esc(a.url)}" target="_blank" rel="noopener">Abrir en Facebook ↗</a>` : ''}</div></div>`).join('') : '<div class="album-fila">Sin álbumes todavía</div>'}
       </div>`).join('')
     : '<div class="vacio">Todavía no hay álbumes.</div>';
 }
@@ -911,6 +1043,11 @@ function actualizarNombreAlbum() {
   const vendedor = nuevo ? $('#a-nuevo').value : $('#a-vendedor').value;
   const f = $('#a-fecha').value;
   if (nuevo) $('#a-prueba').checked = true;
+  // Si el link ya es de un álbum guardado, se reemplaza ese mismo (con su nombre), sin importar la fecha o el vendedor de arriba
+  if (albumLink && !$('#a-prueba').checked) {
+    $('#a-nombre').innerHTML = `Se reemplazará <b>${esc(albumLink.nombre)}</b> (mismo link); la fecha y el vendedor de arriba no cambian el nombre.`;
+    return;
+  }
   if (!vendedor || !f) { $('#a-nombre').textContent = ''; return; }
   const [, m, d] = f.split('-').map(Number);
   const nombre = `${slug(vendedor)}-${MESES_CORTOS[m - 1]}${d}`;
@@ -920,6 +1057,28 @@ function actualizarNombreAlbum() {
 ['#a-vendedor', '#a-nuevo', '#a-fecha'].forEach((id) => $(id).addEventListener('input', actualizarNombreAlbum));
 $('#a-vendedor').addEventListener('change', actualizarNombreAlbum);
 
+// Aviso de link repetido: mientras pegas el link se consulta si ya es de un álbum procesado (por el id del álbum de Facebook)
+let albumLink = null;
+let temporizadorLink = null;
+function pintarAvisoLink() {
+  $('#a-link-aviso').innerHTML = albumLink && !$('#a-prueba').checked
+    ? `⚠ Este link ya está procesado como <b>${esc(albumLink.nombre)}</b> (${fecha(albumLink.fecha)} · ${albumLink.filas} filas). Si lo procesas, se reemplaza ese álbum y se vuelve a pagar Gemini.`
+    : '';
+  actualizarNombreAlbum();
+}
+$('#a-url').addEventListener('input', () => {
+  clearTimeout(temporizadorLink);
+  const link = $('#a-url').value.trim();
+  if (!/facebook\.com/i.test(link)) { albumLink = null; pintarAvisoLink(); return; }
+  temporizadorLink = setTimeout(async () => {
+    try {
+      const d = await api(`/api/album/link?url=${encodeURIComponent(link)}`);
+      if ($('#a-url').value.trim() === link) { albumLink = d.album; pintarAvisoLink(); }
+    } catch {}
+  }, 350);
+});
+$('#a-prueba').addEventListener('change', pintarAvisoLink);
+
 async function abrirAgregar(vendedor) {
   $('#a-error').textContent = '';
   if (!$('#a-fecha').value) $('#a-fecha').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -928,6 +1087,7 @@ async function abrirAgregar(vendedor) {
   if (vendedor) $('#a-vendedor').value = vendedor;
   $('#a-prueba').checked = false;
   actualizarNombreAlbum();
+  $('#a-url').dispatchEvent(new Event('input')); // si quedó un link escrito, vuelve a revisar si ya está procesado
   $('#a-url').focus();
 }
 $('#btn-agregar').addEventListener('click', () => abrirAgregar());
@@ -938,6 +1098,266 @@ $('#btn-albumes').addEventListener('click', async () => {
 $('#lista-albumes').addEventListener('click', (e) => {
   const b = e.target.closest('[data-agregar]');
   if (b) { cerrarVentanas(); abrirAgregar(b.dataset.agregar); }
+  const r = e.target.closest('[data-revisar]');
+  if (r) { cerrarVentanas(); abrirRevisar(r.dataset.revisar); }
+});
+
+// ---------- Por revisar: filas dudosas de TODOS los álbumes ----------
+// Las decisiones se guardan en scripts/salida/revision-fotos.json (no en el maestro), así que
+// siguen valiendo aunque vuelvas a correr un álbum. Se aplican a la base al cerrar esta ventana.
+const rv = { filas: [], cambios: false, album: '', tipo: '', ver: 'pendientes', bajos: false, cargado: false };
+const pendientesRv = () => rv.filas.filter((f) => !f.decision && !f.bajo).length;
+function pintarContadorRv() { $('#rv-n').textContent = rv.cargado ? `(${pendientesRv()})` : ''; }
+async function cargarRevisar() {
+  const d = await api('/api/porrevisar');
+  rv.filas = d.filas;
+  rv.cargado = true;
+  pintarContadorRv();
+}
+async function abrirRevisar(album = '') {
+  rv.album = album;
+  abrirVentana('#v-revisar');
+  $('#rv-lista').innerHTML = '<div class="vacio">Cargando…</div>';
+  try { await cargarRevisar(); } catch (e) { $('#rv-lista').textContent = e.message; return; }
+  pintarRevisar();
+}
+// Lo que se muestra de una fila: lo que leyó el scraper, o tus correcciones si ya la corregiste
+function vistaRv(f) {
+  const c = f.decision?.accion === 'corregida' ? f.decision.cambios || {} : {};
+  return {
+    modelo: c.modelo || f.modelo,
+    serie: c.serie ?? f.serie,
+    numero: c.numero ?? f.numero,
+    precio: c.precio !== undefined && c.precio !== null ? c.precio : f.precio,
+  };
+}
+// Tipo de problema: traduce el motivo (texto libre de Gemini o aviso del scraper) a algo que se pueda hacer.
+// Se decide por las palabras de la nota, así que es una guía: la nota original siempre se muestra completa.
+const TIPOS_RV = {
+  precio:     { chip: '💲 Precio por confirmar', clase: 'rojo', paso: 'Confirma el precio con el pie de foto del vendedor (o con la captura de Facebook). Si está mal o falta, ✎ Corregir.' },
+  sin_leer:   { chip: '📵 Foto sin leer', clase: 'rojo', paso: 'Esta foto no se pudo leer bien. Mírala en Facebook y corrige modelo y precio, o 🗑 Descartar.' },
+  faltan:     { chip: '🧮 Faltan carritos', clase: 'ambar', paso: 'Gemini no encontró todos los carritos de la foto. Revisa que el de esta posición esté bien y que no falte otro.' },
+  custom:     { chip: '🧩 Posible custom, reempaque o set', clase: 'morado', paso: 'Puede no ser un carrito normal de línea. Si no se puede comparar con tus productos, 🗑 Descartar.' },
+  nombre:     { chip: '🔤 Nombre dudoso', clase: 'ambar', paso: 'Compara el nombre con el empaque{pos}. Si no coincide, ✎ Corregir.' },
+  sin_motivo: { chip: '❔ Gemini no explicó', clase: 'gris', paso: 'Gemini no dijo por qué dudó. Revisa nombre, precio y posición contra la foto.' },
+  info:       { chip: '📝 Nota de Gemini', clase: 'azul', paso: 'Gemini dejó una observación (abajo). Si nombre y precio están bien, ✓ Está bien.' },
+};
+function tipoRv(f) {
+  const n = String(f.notas || '');
+  if (!f.modelo || String(f.modelo).startsWith('(') || /^(No se leyó|Error)/i.test(n)) return 'sin_leer';
+  if (f.precio == null || /sin precio|no se pudo leer el pie|se asume|se divide|combo|lote/i.test(n)) return 'precio';
+  if (/faltan carritos/i.test(n)) return 'faltan';
+  if (/custom|repack|reempaque|modificad|diorama|\bset\b|otro modelo|bootleg|personalizad/i.test(n)) return 'custom';
+  if (/estimad|legible|verificar|distingu|dif[ií]cil|visible|visibilidad|silueta|nombre|casting|alcanza|parece|cubiert|parcialmente|basad|baja resoluci|datos de más|texto de más/i.test(n)) return 'nombre';
+  if (!motivoGemini(n)) return 'sin_motivo';
+  return 'info';
+}
+// El motivo real: sin el "Marcado por Gemini" de relleno ni la etiqueta del vendedor (que es dato, no duda)
+const motivoGemini = (n) => String(n || '').split('|').map((s) => s.trim()).filter((s) => s && s !== 'Marcado por Gemini' && !/^Etiqueta del vendedor/i.test(s)).join(' | ');
+const chipRv = (f) => { const t = TIPOS_RV[tipoRv(f)]; return `<span class="chip ${t.clase}">${t.chip}</span>`; };
+const pasoRv = (f) => TIPOS_RV[tipoRv(f)].paso.replace('{pos}', f.posiciones ? ` de la posición ${f.posiciones}` : '');
+// La nota original, sin recortar; si Gemini marcó la fila sin escribir motivo, se dice así
+function notaRv(f) {
+  const t = tipoRv(f);
+  if (t === 'sin_motivo') {
+    const etiqueta = String(f.notas || '').split('|').map((s) => s.trim()).find((s) => /^Etiqueta del vendedor/i.test(s));
+    return 'Gemini marcó esta fila sin escribir un motivo.' + (etiqueta ? ` ${etiqueta}.` : '');
+  }
+  return `${['nombre', 'custom', 'info'].includes(t) ? 'Gemini dice' : 'Aviso'}: ${f.notas || 'Marcado para revisar'}`;
+}
+
+function filaRv(f) {
+  const v = vistaRv(f);
+  const ruta = f.archivoFoto ? `/fotoalbum/${encodeURIComponent(f.archivoFoto)}` : '';
+  const foto = ruta ? `<a href="${ruta}" target="_blank" rel="noopener" data-rv="foto" title="Ver la foto en grande (Ctrl/⌘ + clic: pestaña nueva)"><img src="${ruta}" loading="lazy" alt=""></a>` : '<div class="sinfoto">sin foto</div>';
+  const estado = f.decision ? { revisada: '✓ revisada', descartada: '🗑 descartada', corregida: '✎ corregida' }[f.decision.accion] : '';
+  const donde = `${esc(f.album)} · foto ${f.foto}${f.posiciones ? ` · pos. ${esc(f.posiciones)}` : ''}`;
+  const botones = f.decision
+    ? '<button type="button" data-rv="deshacer">↺ Deshacer</button>'
+    : '<button type="button" class="si" data-rv="ok">✓ Está bien</button><button type="button" data-rv="editar">✎ Corregir</button><button type="button" class="no" data-rv="descartar">🗑 Descartar</button>';
+  return `<div class="rv-fila ${f.decision ? 'hecha' : ''}" data-clave="${esc(f.clave)}">
+    ${foto}
+    <div class="rv-datos">
+      <div><span class="rv-modelo">${esc(v.modelo || '(sin nombre)')}</span><span class="rv-precio">${v.precio != null ? dinero(v.precio) : '<span class="sin-precio">sin precio</span>'}</span>${estado ? ` <span class="chip gris">${estado}</span>` : ''}${f.bajo ? ' <span class="chip rojo">$30 o menos</span>' : ''} ${chipRv(f)}</div>
+      <div class="rv-meta">${esc(v.serie || 'sin serie')}${v.numero ? ` · ${esc(v.numero)}` : ''} · ${esc(f.marca)} · ${donde}</div>
+      ${String(f.pie || '').trim() ? `<div class="rv-pie"><b>Pie de foto:</b> ${esc(String(f.pie).trim().replace(/\s*\n+\s*/g, ' · ').slice(0, 160))}</div>` : ''}
+      <div class="rv-que"><b>Qué revisar:</b> ${esc(pasoRv(f))}</div>
+      <div class="rv-motivo">⚠ ${esc(notaRv(f))}</div>
+      <div class="rv-botones">${botones}${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Facebook ↗</a>` : ''}</div>
+      <form class="rv-edit" hidden>
+        <div><label>Modelo</label><input type="text" name="modelo" value="${esc(v.modelo)}" required></div>
+        <div><label>Serie</label><input type="text" name="serie" value="${esc(v.serie)}"></div>
+        <div><label>Número</label><input type="text" name="numero" value="${esc(v.numero)}" placeholder="43/250"></div>
+        <div><label>Precio $</label><input type="number" name="precio" value="${v.precio ?? ''}" min="1" step="any" inputmode="decimal"></div>
+        <div class="rv-edit-botones"><span class="rv-edit-nota">Sin precio no entra a la base.</span><button type="button" data-rv="cancelar">Cancelar</button><button type="submit" class="primario">Guardar corrección</button></div>
+      </form>
+    </div>
+  </div>`;
+}
+function pintarRevisar() {
+  const albumes = [...new Set(rv.filas.map((f) => f.album))].sort();
+  const enAlbum = (f) => !rv.album || f.album === rv.album;
+  const deEstaVista = (f) => (rv.ver === 'pendientes' ? !f.decision : !!f.decision);
+  $('#rv-album').innerHTML = '<option value="">Todos los álbumes</option>' +
+    albumes.map((a) => `<option value="${esc(a)}">${esc(a)} (${rv.filas.filter((f) => f.album === a && !f.decision && !f.bajo).length})</option>`).join('');
+  $('#rv-album').value = rv.album;
+  // Filtro por tipo de problema, con cuántas pendientes hay de cada uno (según el álbum elegido)
+  const cuentas = {};
+  for (const f of rv.filas) if (enAlbum(f) && !f.decision && !f.bajo) { const t = tipoRv(f); cuentas[t] = (cuentas[t] || 0) + 1; }
+  $('#rv-tipo').innerHTML = '<option value="">Todos los problemas</option>' +
+    Object.entries(TIPOS_RV).map(([k, t]) => `<option value="${k}">${t.chip} (${cuentas[k] || 0})</option>`).join('');
+  $('#rv-tipo').value = rv.tipo;
+  $('#rv-ver').value = rv.ver;
+  $('#rv-bajos').checked = rv.bajos;
+  const deEsteTipo = (f) => !rv.tipo || tipoRv(f) === rv.tipo;
+  const lista = rv.filas.filter((f) => enAlbum(f) && deEstaVista(f) && deEsteTipo(f) && (rv.bajos || !f.bajo));
+  const ocultas = rv.filas.filter((f) => enAlbum(f) && deEstaVista(f) && deEsteTipo(f) && f.bajo).length;
+  $('#rv-resumen').textContent = `${pendientesRv()} pendientes en total (de $30 o menos no se cuentan). Tus decisiones se aplican a la base al cerrar esta ventana.`;
+  $('#rv-lista').innerHTML =
+    (lista.length ? lista.map(filaRv).join('') : `<div class="vacio">${rv.ver === 'pendientes' ? 'No hay filas pendientes aquí 🎉' : 'Todavía no has resuelto ninguna aquí.'}</div>`) +
+    (!rv.bajos && ocultas ? `<div class="ayuda">Hay ${ocultas} más de $30 o menos ocultas (la base las ignora). Actívalas arriba si quieres verlas.</div>` : '');
+  pintarContadorRv();
+}
+async function decidirRv(f, accion, cambios) {
+  try {
+    await api('/api/revision', { clave: f.clave, accion, cambios });
+    f.decision = accion === 'deshacer' ? null : { accion, fecha: new Date().toISOString(), cambios: cambios || null };
+    rv.cambios = true;
+    pintarRevisar();
+    aviso({ revisada: 'Marcada como revisada', descartada: 'Descartada (puedes deshacerla en "Ya resueltas")', corregida: 'Corrección guardada', deshacer: 'Decisión deshecha' }[accion]);
+    return true;
+  } catch (e) {
+    aviso(e.message, true);
+    return false;
+  }
+}
+
+// Filas que se ven ahora en la lista (según álbum, pendientes/resueltas y el interruptor de $30 o menos)
+function visiblesRv() {
+  return rv.filas.filter((f) => (!rv.album || f.album === rv.album) && (!rv.tipo || tipoRv(f) === rv.tipo) && (rv.ver === 'pendientes' ? !f.decision : !!f.decision) && (rv.bajos || !f.bajo));
+}
+// Panel de detalles del visor
+function detalleRv(f) {
+  const v = vistaRv(f);
+  const pie = String(f.pie || '').trim();
+  const estado = f.decision ? { revisada: '✓ Revisada', descartada: '🗑 Descartada', corregida: '✎ Corregida' }[f.decision.accion] : '';
+  const dato = (k, val) => (val ? `<div><span>${k}</span>${esc(val)}</div>` : '');
+  const antes = f.decision?.accion === 'corregida'
+    ? `<div class="dt-antes">Lo que leyó el scraper: ${esc(f.modelo || '(sin nombre)')} · ${f.precio != null ? dinero(f.precio) : 'sin precio'}${f.serie ? ' · ' + esc(f.serie) : ''}${f.numero ? ' · ' + esc(f.numero) : ''}</div>`
+    : '';
+  return `<div class="dt-modelo">${esc(v.modelo || '(sin nombre)')}</div>
+    <div class="dt-precio ${v.precio == null ? 'sin' : ''}">${v.precio != null ? dinero(v.precio) : 'sin precio'}</div>
+    ${estado ? `<div class="dt-estado">${estado}</div>` : ''}
+    <div class="dt-tipo">${chipRv(f)}</div>
+    <div class="dt-que"><b>Qué revisar:</b> ${esc(pasoRv(f))}</div>
+    ${dato('Serie', v.serie)}${dato('Número', v.numero)}${dato('Marca', f.marca)}${dato('Vendedor', f.vendedor)}${dato('Álbum', f.album)}${dato('Foto', `${f.foto}${f.posiciones ? ' · pos. ' + f.posiciones : ''}`)}
+    ${f.bajo ? '<div class="dt-bajo">$30 o menos: la base lo ignora</div>' : ''}
+    <div class="dt-pie"><b>Pie de foto del vendedor</b>${pie ? `<pre>${esc(pie)}</pre>` : `<div class="nada">No se pudo leer el pie como texto.${f.pantalla ? ' Mira la captura de Facebook (botón de abajo o tecla C).' : ''}</div>`}</div>
+    <div class="dt-motivo">⚠ ${esc(notaRv(f))}</div>${antes}`;
+}
+function abrirVisorRv(f) {
+  const lista = visiblesRv().filter((x) => x.archivoFoto);
+  const i = lista.indexOf(f);
+  if (i < 0) return;
+  const items = lista.map((x) => {
+    const v = vistaRv(x);
+    return {
+      src: `/fotoalbum/${encodeURIComponent(x.archivoFoto)}`,
+      pie: `${v.modelo || '(sin nombre)'} · ${v.precio != null ? dinero(v.precio) : 'sin precio'}`,
+      url: x.url,
+      pos: String(x.posiciones || '').split(/[,\s]+/).map(Number).filter((n) => n > 0),
+      total: x.total || 0,
+      srcAlt: x.pantalla ? `/pantalla/${encodeURIComponent(x.pantalla)}` : null, // captura de Facebook con el pie de foto
+      detalle: detalleRv(x),
+      resuelta: !!x.decision,
+      fila: x,
+    };
+  });
+  visor.abrir(items, i, { detalle: true, revision: revisionDesdeVisor });
+}
+// Botones del visor: ok / descartar / deshacer guardan la decisión; editar abre el formulario de esa fila en la lista
+async function revisionDesdeVisor(item, accion) {
+  const f = item.fila;
+  if (accion === 'editar') { abrirEdicionRv(f); return true; }
+  return decidirRv(f, { ok: 'revisada', descartar: 'descartada', deshacer: 'deshacer' }[accion]);
+}
+function abrirEdicionRv(f) {
+  const cont = [...document.querySelectorAll('#rv-lista .rv-fila')].find((el) => el.dataset.clave === f.clave);
+  if (!cont) return;
+  const form = $('.rv-edit', cont);
+  form.hidden = false;
+  cont.scrollIntoView({ block: 'center' });
+  $('input[name=modelo]', form).focus();
+}
+async function cerrarRevision() {
+  if (!rv.cambios) return;
+  aviso('Aplicando tus decisiones a la base…');
+  try {
+    await api('/api/revision/aplicar', {});
+    rv.cambios = false;
+    location.reload();
+  } catch (e) {
+    aviso(e.message, true);
+  }
+}
+$('#btn-revisar').addEventListener('click', () => abrirRevisar());
+$('#rv-album').addEventListener('change', (e) => { rv.album = e.target.value; pintarRevisar(); });
+$('#rv-tipo').addEventListener('change', (e) => { rv.tipo = e.target.value; pintarRevisar(); });
+$('#rv-ver').addEventListener('change', (e) => { rv.ver = e.target.value; pintarRevisar(); });
+$('#rv-bajos').addEventListener('change', (e) => { rv.bajos = e.target.checked; pintarRevisar(); });
+$('#rv-cerrar').addEventListener('click', cerrarVentanas);
+$('#rv-lista').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rv]');
+  if (!b) return;
+  const cont = b.closest('.rv-fila');
+  const f = rv.filas.find((x) => x.clave === cont.dataset.clave);
+  if (!f) return;
+  const accion = b.dataset.rv;
+  if (accion === 'foto') {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // con Ctrl/⌘ se abre en pestaña nueva
+    e.preventDefault();
+    abrirVisorRv(f);
+  }
+  else if (accion === 'editar') { const form = $('.rv-edit', cont); form.hidden = !form.hidden; if (!form.hidden) $('input[name=modelo]', form).focus(); }
+  else if (accion === 'cancelar') $('.rv-edit', cont).hidden = true;
+  else if (accion === 'ok') decidirRv(f, 'revisada');
+  else if (accion === 'descartar') decidirRv(f, 'descartada');
+  else if (accion === 'deshacer') decidirRv(f, 'deshacer');
+});
+$('#rv-lista').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const cont = e.target.closest('.rv-fila');
+  const f = rv.filas.find((x) => x.clave === cont.dataset.clave);
+  if (!f) return;
+  const campo = (n) => e.target.elements[n].value.trim();
+  const precio = campo('precio');
+  decidirRv(f, 'corregida', { modelo: campo('modelo'), serie: campo('serie'), numero: campo('numero'), precio: precio === '' ? null : Number(precio) });
+});
+
+// Copiar el log del recuadro de avance (en iPhone la página va por http y el portapapeles normal no funciona: por eso el respaldo)
+async function copiarTexto(texto) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(texto); return true; }
+  } catch {}
+  const ta = document.createElement('textarea');
+  ta.value = texto;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, texto.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch {}
+  ta.remove();
+  return ok;
+}
+$('#av-copiar').addEventListener('click', async () => {
+  const boton = $('#av-copiar');
+  const texto = $('#av-log').textContent.trim();
+  if (!texto) return aviso('Todavía no hay nada que copiar', true);
+  const ok = await copiarTexto(texto);
+  boton.textContent = ok ? '✓ Copiado' : 'No se pudo copiar';
+  setTimeout(() => (boton.textContent = 'Copiar log'), 1800);
 });
 
 $('#f-agregar').addEventListener('submit', async (e) => {
@@ -962,6 +1382,8 @@ $('#f-agregar').addEventListener('submit', async (e) => {
   if (!r.ok) { $('#a-error').textContent = r.datos.error || 'No se pudo iniciar'; return; }
   cerrarVentanas();
   $('#a-url').value = '';
+  albumLink = null;
+  pintarAvisoLink();
   iniciarAvance();
 });
 
@@ -1033,6 +1455,7 @@ let versionBase = 0;
     const deptos = [...new Set(productos.map((p) => p.departamento))].sort();
     $('#depto').innerHTML += deptos.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
     pintar();
+    cargarRevisar().catch(() => {}); // solo para el contador del botón "Por revisar"
     // Si hay un álbum procesándose (p. ej. lo iniciaste desde el iPhone), muestra su avance
     const t = await api('/api/album/estado?desde=0');
     if (t.activo) {
