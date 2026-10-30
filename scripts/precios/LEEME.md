@@ -158,6 +158,10 @@ Las de "otra versión" nunca entran en el rango.
 
 ---
 
+## Cómo funcionan las llaves y el saldo (resumen)
+
+Hay dos llaves de Gemini (scraper y tienda) del mismo proyecto "tienda hg": comparten un solo saldo prepagado. Detalles de costos y candados en `~/Desktop/scraper-hotwheels/LEEME.md`. En el sitio se **quitó** la referencia de precio con IA (commit df8a15c); la referencia de precios sale solo de esta página.
+
 ## Reglas de datos
 
 - **Marcas:** solo Hot Wheels (incluye Premium, Racerverse, Mario Kart y Monster Trucks), Matchbox y Cars. Nada de carritos sueltos ni otras marcas.
@@ -169,6 +173,15 @@ Las de "otra versión" nunca entran en el rango.
 
 | Vendedor | Estado |
 |---|---|
+| Mario Lopez | Álbumes sep07, sep14, sep21, sep28, oct05, oct15, oct20. Fotos chicas (720 px): sin números de colección. |
+| Alain Rodriguez | Álbumes sep13, sep20, oct25, ago10. Es el que más me gusta como referencia; fotos grandes, con números de colección. |
+| Fernando Huerta | Pendiente: falta el link. |
+| Anny | A futuro. |
+| Joanna | Descartada; sus datos se borraron. |
+
+Estado al 29 oct 2026: 11 álbumes, 3,915 filas en la base del scraper; la base de la página tiene ~2,262 precios (lo de $30 o menos se deja fuera).
+
+---|---|
 | Mario Lopez | Álbumes sep07, sep14, sep21, sep28, oct05, oct15, oct20. |
 | Alain Rodriguez | oct25. Es el que más me gusta como referencia. |
 | Fernando Huerta | Pendiente: falta el link. |
@@ -181,7 +194,7 @@ Las de "otra versión" nunca entran en el rango.
 
 - [ ] Deploy de los precios guardados.
 - [ ] Commit y push de los cambios de `scripts/precios/` y `src/lib/emparejar-precios.mjs`.
-- [ ] Álbum de Fernando Huerta y más álbumes de Alain.
+- [ ] Álbum de Fernando Huerta y más álbumes de Alain (cada álbum de 50-80 fotos cuesta ~1-7 MXN; el scraper tiene tope de 8 MXN por corrida).
 - [ ] Respaldar `scripts/salida/` de vez en cuando.
 
 ## Ideas en espera (solo si las pido)
