@@ -249,6 +249,15 @@ function albumPorLink(link) {
   return null;
 }
 
+/** Nombre libre para un álbum nuevo: "alain-rodriguez-oct25"; si ya existe (otro link), "…-2", luego "…-3", etc. */
+function nombreLibre(base) {
+  const usados = new Set(leerJson(ARCHIVO_MAESTRO, { albumes: [] }).albumes || []);
+  if (!usados.has(base)) return base;
+  let n = 2;
+  while (usados.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
 /** Álbumes ya procesados, agrupados por vendedor (más reciente primero). */
 function historialAlbumes() {
   const maestro = leerJson(ARCHIVO_MAESTRO, { albumes: [], filas: [] });
@@ -484,8 +493,9 @@ const servidor = http.createServer(async (req, res) => {
       if (!fs.existsSync(path.join(CARPETA_SCRAPER, 'extraer_album.mjs'))) return responder(res, 500, { error: `No encuentro el scraper en ${CARPETA_SCRAPER}` });
       if (!process.env.GEMINI_API_KEY) return responder(res, 500, { error: 'Falta GEMINI_API_KEY: abre la página con la app "Precios Carritos" o desde una terminal' });
       const [, mes, dia] = fecha.split('-').map(Number);
-      const nombre = `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
-      // 1) ¿El link ya es de un álbum guardado? (aunque la fecha o el vendedor escritos sean otros). Una prueba de 3 fotos no guarda nada.
+      const nombreBase = `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
+      // El LINK es lo que identifica al álbum. ¿Ya es de un álbum guardado? (aunque la fecha o el vendedor escritos sean otros).
+      // Una prueba de 3 fotos no guarda nada.
       const igual = prueba ? null : albumPorLink(link);
       if (igual && !confirmarRepetido) {
         return responder(res, 409, {
@@ -493,17 +503,16 @@ const servidor = http.createServer(async (req, res) => {
           error: `Ese link ya está procesado como "${igual.nombre}" (${igual.filas} filas). Si lo vuelves a correr, se reemplaza ese álbum (y se vuelve a pagar Gemini).`,
         });
       }
-      // 2) Mismo nombre pero otro link: se reemplazaría un álbum distinto (p. ej. dos álbumes del mismo vendedor el mismo día)
-      if (!igual && !prueba && historialAlbumes().nombres.includes(nombre) && !confirmarRepetido) {
-        return responder(res, 409, { repetido: true, error: `Ya existe un álbum "${nombre}" pero con OTRO link. Si lo corres, se reemplaza ese álbum. Si es un álbum distinto, cambia la fecha o el vendedor.` });
-      }
+      // Mismo link = se reemplaza ese álbum con su nombre. Link distinto = álbum nuevo: si el nombre ya lo tiene otro álbum
+      // (el mismo vendedor publicó dos ese día), se le agrega el número: alain-rodriguez-oct25-2, -3… Nunca reemplaza a otro álbum.
+      const nombre = igual ? igual.nombre : prueba ? nombreBase : nombreLibre(nombreBase);
       const vendedorFinal = igual ? leerAlbum(igual.nombre).vendedor : vendedor.trim();
       if (!igual) {
         const vendedores = leerJson(ARCHIVO_VENDEDORES, []);
         if (!vendedores.includes(vendedorFinal)) escribirJson(ARCHIVO_VENDEDORES, [...vendedores, vendedorFinal]);
       }
-      const album = correrAlbum({ url: link, vendedor: vendedorFinal, fecha: igual?.fecha || fecha, prueba: !!prueba, nombreForzado: igual?.nombre });
-      return responder(res, 200, { album });
+      const album = correrAlbum({ url: link, vendedor: vendedorFinal, fecha: igual?.fecha || fecha, prueba: !!prueba, nombreForzado: nombre });
+      return responder(res, 200, { album, numerado: !igual && !prueba && nombre !== nombreBase });
     }
     // ¿Este link ya está procesado? (la página lo consulta mientras pegas el link)
     if (req.method === 'GET' && url.pathname === '/api/album/link') {

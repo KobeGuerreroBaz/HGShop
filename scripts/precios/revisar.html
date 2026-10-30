@@ -1049,10 +1049,16 @@ function actualizarNombreAlbum() {
     return;
   }
   if (!vendedor || !f) { $('#a-nombre').textContent = ''; return; }
+  if ($('#a-prueba').checked) { $('#a-nombre').textContent = 'Es una prueba de 3 fotos: no se guarda nada.'; return; }
   const [, m, d] = f.split('-').map(Number);
-  const nombre = `${slug(vendedor)}-${MESES_CORTOS[m - 1]}${d}`;
-  const existe = historial.grupos.some((g) => g.albumes.some((a) => a.nombre === nombre));
-  $('#a-nombre').innerHTML = `Se guardará como <b>${esc(nombre)}</b>${existe ? ' · <span style="color:var(--rojo)">ya existe: se reemplazaría</span>' : ''}`;
+  const base = `${slug(vendedor)}-${MESES_CORTOS[m - 1]}${d}`;
+  // Si ese vendedor ya tiene un álbum con ese nombre (y el link es otro), este se guarda con número: …-2, …-3
+  const usados = new Set(historial.grupos.flatMap((g) => g.albumes.map((a) => a.nombre)));
+  let nombre = base;
+  for (let n = 2; usados.has(nombre); n++) nombre = `${base}-${n}`;
+  $('#a-nombre').innerHTML = nombre === base
+    ? `Se guardará como <b>${esc(nombre)}</b>`
+    : `Se guardará como <b>${esc(nombre)}</b> · ya hay un álbum de ese día con otro link, así que este lleva el número (no reemplaza al otro).`;
 }
 ['#a-vendedor', '#a-nuevo', '#a-fecha'].forEach((id) => $(id).addEventListener('input', actualizarNombreAlbum));
 $('#a-vendedor').addEventListener('change', actualizarNombreAlbum);

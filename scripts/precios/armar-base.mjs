@@ -29,17 +29,21 @@ export const CARPETA_SCRAPER_DEFECTO = path.join(os.homedir(), 'Desktop', 'scrap
 const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, oct: 10, nov: 11, dic: 12 };
 const titulo = (s) => s.split(/[-_\s]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 
-/** "mario-lopez-oct20" → { vendedor: "Mario Lopez", fecha: "2026-10-20" } */
+/**
+ * "mario-lopez-oct20" → { vendedor: "Mario Lopez", fecha: "2026-10-20", numero: 1 }
+ * Si el mismo vendedor publicó más de un álbum ese día, el nombre lleva el número al final:
+ * "alain-rodriguez-oct25-2" → { vendedor: "Alain Rodriguez", fecha: "2026-10-25", numero: 2 }
+ */
 export function leerAlbum(album) {
-  const m = String(album).match(/^(.*?)-(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)(\d{1,2})$/i);
-  if (!m) return { vendedor: titulo(album), fecha: '' };
+  const m = String(album).match(/^(.*?)-(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)(\d{1,2})(?:-(\d+))?$/i);
+  if (!m) return { vendedor: titulo(album), fecha: '', numero: 1 };
   const hoy = new Date();
   const mes = MESES[m[2].toLowerCase()];
   const dia = Number(m[3]);
   let anio = hoy.getFullYear();
   if (new Date(anio, mes - 1, dia) > hoy) anio -= 1; // una fecha "futura" es del año pasado
   const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-  return { vendedor: titulo(m[1]), fecha };
+  return { vendedor: titulo(m[1]), fecha, numero: m[4] ? Number(m[4]) : 1 };
 }
 
 /**
