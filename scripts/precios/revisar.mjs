@@ -110,23 +110,32 @@ const albumesActuales = () => [...new Set(base.map((a) => a.album).filter(Boolea
   if (migrados) { escribirJson(ARCHIVO_ESTADO, estado); console.log(`  Novedades: anoté los álbumes actuales a ${migrados} precios ya guardados`); }
 }
 
-console.log('Leyendo tus productos de Sanity...');
-const productos = await client.fetch(
-  `*[_type == "producto" && (
+// Se leen al abrir la página y otra vez con el botón "🔄 Traer productos nuevos" (sin apagar la página)
+const CONSULTA_PRODUCTOS = `*[_type == "producto" && (
       categoria->departamento in $deps ||
       (categoria->departamento == "autos-a-escala" && (titulo match "matchbox" || marca match "matchbox"))
     )]{
-    _id, titulo, precio, marca, edicion, cantidadDisponible, agotado,
+    _id, _createdAt, titulo, precio, marca, edicion, cantidadDisponible, agotado,
     "imagen": imagenPrincipal.asset->url,
     "departamento": categoria->departamento,
     "categoria": categoria->titulo
-  } | order(titulo asc)`,
-  { deps: DEPARTAMENTOS }
-);
-const porId = new Map(productos.map((p) => [p._id, p]));
+  } | order(titulo asc)`;
+const leerProductos = () => client.fetch(CONSULTA_PRODUCTOS, { deps: DEPARTAMENTOS });
 
+console.log('Leyendo tus productos de Sanity...');
+let productos = await leerProductos();
+const porId = new Map();
 const conteo = {};
-for (const p of productos) conteo[p.departamento] = (conteo[p.departamento] || 0) + 1;
+/** Rehace el índice por id y el conteo por departamento (al abrir y al traer productos nuevos). */
+function indexarProductos() {
+  porId.clear();
+  for (const k of Object.keys(conteo)) delete conteo[k];
+  for (const p of productos) {
+    porId.set(p._id, p);
+    conteo[p.departamento] = (conteo[p.departamento] || 0) + 1;
+  }
+}
+indexarProductos();
 
 const claveAv = (a) => `${a.album}|${a.foto}|${a.posiciones}`;
 const textoProducto = (p) => `${p.titulo} ${p.edicion || ''}`;
@@ -543,6 +552,17 @@ const servidor = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(CARPETA, 'revisar.html')));
+    }
+
+    // Botón "🔄 Traer productos nuevos": vuelve a leer tus productos de Sanity sin apagar la página
+    if (req.method === 'POST' && url.pathname === '/api/productos/recargar') {
+      const antes = new Set(productos.map((p) => p._id));
+      productos = await leerProductos();
+      indexarProductos();
+      const nuevos = productos.filter((p) => !antes.has(p._id)).length;
+      const quitados = [...antes].filter((id) => !porId.has(id)).length;
+      console.log(`  Productos recargados: ${productos.length} (${nuevos} nuevos, ${quitados} ya no están)`);
+      return responder(res, 200, { ok: true, total: productos.length, nuevos, quitados });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/datos') {

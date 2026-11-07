@@ -126,6 +126,7 @@
   .datos-tarjeta { color: var(--suave); font-size: 11px; }
   .datos-tarjeta .num { color: var(--texto); font-size: 12px; }
   .chip.oro { background: #fef9c3; color: #854d0e; font-weight: 600; }
+  .chip.reciente { background: #ccfbf1; color: #0f766e; font-weight: 600; }
   .visor-barra a { color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 7px 12px; text-decoration: none; background: rgba(255,255,255,.12); }
   .vacio { color: var(--suave); font-style: italic; padding: 8px 0; }
   .acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--borde); }
@@ -242,6 +243,7 @@
   <div class="cabecera">
     <h1>Carritos · Revisar precios</h1>
     <div class="botones">
+      <button id="btn-traer" type="button" title="Vuelve a leer tus productos de Sanity (lo que acabas de subir) sin apagar la página">🔄 Traer productos nuevos</button>
       <button id="btn-revisar" type="button" title="Filas que el scraper dejó dudosas, de todos los álbumes">🔍 Por revisar <span id="rv-n"></span></button>
       <button id="btn-agregar" type="button">➕ Agregar álbum</button>
       <button id="btn-albumes" type="button">📚 Álbumes</button>
@@ -366,6 +368,16 @@ const fecha = (f) => {
   return m ? `${Number(m[3])} ${MESES[Number(m[2]) - 1]}` : esc(f || '');
 };
 
+// "🆕 Recién subidos": carritos subidos en los últimos DIAS_RECIENTES días (cuenta días de calendario)
+const DIAS_RECIENTES = 7;
+function diasSubido(p) {
+  if (!p._createdAt) return null;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const dia = new Date(p._createdAt); dia.setHours(0, 0, 0, 0);
+  return Math.round((hoy - dia) / 86400000);
+}
+const textoSubido = (n) => (n <= 0 ? 'subido hoy' : n === 1 ? 'subido ayer' : `subido hace ${n} días`);
+
 function aviso(texto, error = false) {
   const el = $('#aviso');
   // Con la foto en grande, el botón ya cambia solo: no hace falta el mensaje. Los errores salen arriba.
@@ -426,11 +438,13 @@ function clasificar(p) {
     revisado: !!p.estado,
     cotizado: (p.cotizado || []).length > 0,
     novedad: novedades(p).length > 0,
+    reciente: (() => { const d = diasSubido(p); return d != null && d < DIAS_RECIENTES; })(),
   };
 }
 
 const FILTROS = [
   ['pendientes', 'Pendientes', (c) => !c.revisado],
+  ['recientes', '🆕 Recién subidos', (c) => c.reciente && !c.revisado],
   ['novedades', '🔔 Novedades', (c) => c.novedad],
   ['sinPrecio', 'Sin precio', (c) => c.sinPrecio && !c.revisado],
   ['debajo', 'Mi precio debajo de la base', (c) => c.debajo && !c.revisado],
@@ -450,6 +464,8 @@ function visibles() {
     .filter((p) => !texto || p.titulo.toLowerCase().includes(texto))
     .filter((p) => !depto || p.departamento === depto)
     .sort((a, b) => {
+      // En "Recién subidos": el último que subiste, primero
+      if (filtro === 'recientes') return String(b._createdAt || '').localeCompare(String(a._createdAt || ''));
       const ca = clasificar(a), cb = clasificar(b);
       if (ca.sinPrecio !== cb.sinPrecio) return ca.sinPrecio ? -1 : 1;
       return (b.candidatos[0]?.score || 0) - (a.candidatos[0]?.score || 0);
@@ -512,6 +528,7 @@ function htmlCandidato(c, desdeBusqueda = false) {
 function htmlTarjeta(p) {
   const c = clasificar(p);
   const chips = [
+    c.reciente ? `<span class="chip reciente">🆕 ${textoSubido(diasSubido(p))}</span>` : '',
     c.sinPrecio ? '<span class="chip rojo">sin precio</span>' : '',
     c.debajo ? '<span class="chip ambar">debajo de la base</span>' : '',
     c.arriba ? '<span class="chip azul">arriba de la base</span>' : '',
@@ -1447,6 +1464,37 @@ $('#btn-apagar').addEventListener('click', async () => {
   catch (e) { aviso(e.message, true); }
 });
 
+// ---------- resumen y departamentos (al abrir y al traer productos nuevos) ----------
+function pintarResumen(d) {
+  const sinPrecio = productos.filter((p) => !p.precio).length;
+  $('#resumen').textContent = `${productos.length} productos (${sinPrecio} sin precio) · base: ${d.base.precios} precios de ${d.base.modelos} modelos · vendedores: ${d.vendedores.join(', ')}${d.aprendidos ? ` · ${d.aprendidos} palabras aprendidas` : ''}`;
+  const elegido = $('#depto').value;
+  const deptos = [...new Set(productos.map((p) => p.departamento))].sort();
+  $('#depto').innerHTML = '<option value="">Todos los departamentos</option>' + deptos.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  $('#depto').value = deptos.includes(elegido) ? elegido : '';
+}
+
+$('#btn-traer').addEventListener('click', async () => {
+  const b = $('#btn-traer');
+  b.disabled = true;
+  b.textContent = '🔄 Leyendo Sanity…';
+  try {
+    const r = await api('/api/productos/recargar', {});
+    const d = await api('/api/datos');
+    productos = d.productos;
+    versionBase = d.version || versionBase;
+    pintarResumen(d);
+    if (r.nuevos) { filtro = 'recientes'; mostrados = POR_PAGINA; window.scrollTo(0, 0); }
+    pintar();
+    aviso(r.nuevos ? `${r.nuevos} ${r.nuevos === 1 ? 'producto nuevo' : 'productos nuevos'} · te muestro 🆕 Recién subidos` : 'No hay productos nuevos en Sanity');
+  } catch (e) {
+    aviso('No pude leer Sanity: ' + e.message, true);
+  } finally {
+    b.disabled = false;
+    b.textContent = '🔄 Traer productos nuevos';
+  }
+});
+
 // ---------- inicio ----------
 let versionBase = 0;
 (async () => {
@@ -1456,10 +1504,7 @@ let versionBase = 0;
     versionBase = d.version || 0;
     $('#btn-apagar').hidden = !d.local;
     if (d.iphone?.length) $('#resumen').insertAdjacentHTML('afterend', `<div class="resumen">📱 Desde tu iPhone (mismo Wi-Fi): <b>${d.iphone.map(esc).join(' · ')}</b> · pide tu PIN</div>`);
-    const sinPrecio = productos.filter((p) => !p.precio).length;
-    $('#resumen').textContent = `${productos.length} productos (${sinPrecio} sin precio) · base: ${d.base.precios} precios de ${d.base.modelos} modelos · vendedores: ${d.vendedores.join(', ')}${d.aprendidos ? ` · ${d.aprendidos} palabras aprendidas` : ''}`;
-    const deptos = [...new Set(productos.map((p) => p.departamento))].sort();
-    $('#depto').innerHTML += deptos.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    pintarResumen(d);
     pintar();
     cargarRevisar().catch(() => {}); // solo para el contador del botón "Por revisar"
     // Si hay un álbum procesándose (p. ej. lo iniciaste desde el iPhone), muestra su avance
