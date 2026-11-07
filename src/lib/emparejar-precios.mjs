@@ -99,6 +99,28 @@ const normalizarNumero = (n) => {
   return v ? `#${Number(v[1])}` : t;
 };
 
+/**
+ * Serie para comparar: EXACTA, solo se ignoran "™"/"®" y las mayúsculas (y espacios de más).
+ * "HW Factory Fresh" y "Factory Fresh" son distintas; "Factory Fresh™" y "factory fresh" son la misma.
+ */
+export function normalizarSerie(s) {
+  return String(s || '').replace(/[™®]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+const escaparRegex = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Años del producto para comparar con el del modelo: los que ya entiende tokens() ("'11", "2011")
+ * y además un número de 2 cifras pegado antes de una marca de coche ("11 Dodge Charger" → 2011).
+ */
+export function aniosDe(texto) {
+  const anios = new Set(tokens(texto).filter(esAnio));
+  const t = String(texto || '').toLowerCase();
+  for (const m of t.matchAll(/(?:^|[^\d'’\/])(\d{2})\s+([a-z]+)/g)) {
+    if (MARCAS_AUTO.has(m[2])) anios.add(`${Number(m[1]) > 30 ? '19' : '20'}${m[1]}`);
+  }
+  return [...anios];
+}
+
 /** Marca canónica a partir del texto (o del campo marca). */
 export function marcaCanonica(...textos) {
   const t = textos.join(' ').toLowerCase();
@@ -139,6 +161,22 @@ export function crearBuscador(base) {
     return w;
   };
 
+  // Series que existen en la base (normalizadas), para encontrar la serie de tu carrito en su título
+  const seriesBase = [...new Set(base.map((a) => normalizarSerie(a.serie)).filter((x) => x.length >= 4))];
+  /**
+   * La serie exacta de tu carrito según su título. Si el texto de una serie aparece solo como parte de otra
+   * ("HW Race" dentro de "HW Race Day"), la de tu carrito es la que cubre el texto completo.
+   */
+  function serieDe(texto) {
+    const t = normalizarSerie(texto);
+    let mejor = '';
+    for (const s of seriesBase) {
+      if (s.length <= mejor.length) continue;
+      if (new RegExp(`(^|[^a-z0-9])${escaparRegex(s)}($|[^a-z0-9])`).test(t)) mejor = s;
+    }
+    return mejor;
+  }
+
   const indice = new Map();
   for (const g of grupos.values()) {
     for (const t of g.toks) {
@@ -177,26 +215,45 @@ export function crearBuscador(base) {
     return s;
   }
 
-  /** Marca cada avistamiento según su número contra el del producto; los de mismo número van primero. */
-  function conNumero(g, numProducto) {
+  /**
+   * Compara cada foto contra tu carrito por número y serie (exacta) y le da un nivel:
+   *  1 = serie y número coinciden
+   *  2 = coincide uno y el otro no contradice (mismo número con otra serie también: el número es más confiable)
+   *  3 = sin datos para comparar (no se leyó, tu título no los trae, o la serie solo difiere en "HW")
+   *  4 = algo leído no coincide (otro número, u otra serie sin número que lo salve) → la página las pliega
+   * Las fotos se ordenan por nivel y, dentro de cada nivel, de la más reciente a la más vieja.
+   */
+  function compararFotos(g, numProducto, serieProducto) {
+    const sinHW = (x) => x.replace(/^hw\s+/, '');
     const av = g.avistamientos.map((a) => {
       const n = normalizarNumero(a.numero);
-      return { ...a, numero: n, mismoNumero: !!(numProducto && n && n === numProducto), otroNumero: !!(numProducto && n && n !== numProducto) };
+      const s = normalizarSerie(a.serie);
+      const mismoNumero = !!(numProducto && n && n === numProducto);
+      const otroNumero = !!(numProducto && n && n !== numProducto);
+      const mismaSerie = !!(serieProducto && s && s === serieProducto);
+      const soloHW = !!(serieProducto && s && !mismaSerie && sinHW(s) === sinHW(serieProducto));
+      const otraSerie = !!(serieProducto && s && !mismaSerie && !soloHW);
+      const nivel = mismoNumero && mismaSerie ? 1
+        : mismoNumero ? 2
+        : mismaSerie && !otroNumero ? 2
+        : otroNumero || otraSerie ? 4
+        : 3;
+      return { ...a, numero: n, mismoNumero, otroNumero, mismaSerie, otraSerie, nivel };
     });
-    av.sort((a, b) => Number(b.mismoNumero) - Number(a.mismoNumero));
+    av.sort((a, b) => a.nivel - b.nivel); // estable: respeta el orden por fecha
     return av;
   }
 
-  function resumen(g, score, confirmado = false, numProducto = '', toksProducto = null) {
-    const avistamientos = conNumero(g, numProducto);
+  function resumen(g, score, confirmado = false, numProducto = '', serieProducto = '', aniosProducto = []) {
+    const avistamientos = compararFotos(g, numProducto, serieProducto);
     const precios = avistamientos.map((a) => a.precio).filter((p) => typeof p === 'number');
     const mismoNumero = avistamientos.some((a) => a.mismoNumero);
     const otroNumero = !mismoNumero && avistamientos.some((a) => a.otroNumero);
-    // misma serie: las palabras de la serie de algún avistamiento aparecen en el título del producto
-    const mismaSerie = !!toksProducto && avistamientos.some((a) => {
-      const ts = distintivas(tokens(a.serie)).filter((t) => t.length >= 3);
-      return ts.length > 0 && ts.every((t) => toksProducto.has(t));
-    });
+    // misma serie: alguna foto trae exactamente la serie de tu carrito
+    const mismaSerie = avistamientos.some((a) => a.mismaSerie);
+    // otro año: tu título y el modelo traen año y no coincide ninguno ('70 Dodge Charger para un '11 Dodge Charger)
+    const aniosModelo = g.toks.filter(esAnio);
+    const otroAnio = !confirmado && aniosProducto.length > 0 && aniosModelo.length > 0 && !aniosModelo.some((x) => aniosProducto.includes(x));
     if (!confirmado) {
       if (mismoNumero) score = Math.min(1, score + 0.15);
       else if (otroNumero) score = Math.max(0, score - 0.15);
@@ -211,6 +268,8 @@ export function crearBuscador(base) {
       mismoNumero,
       otroNumero,
       mismaSerie,
+      otroAnio,
+      plegadas: avistamientos.filter((a) => a.nivel === 4).length,
       min: precios.length ? Math.min(...precios) : null,
       max: precios.length ? Math.max(...precios) : null,
       veces: g.avistamientos.length,
@@ -227,26 +286,29 @@ export function crearBuscador(base) {
   function buscar(texto, opciones = {}) {
     const { marca = null, confirmados = [], rechazados = [], max = 5, minimo = 0.4, aprendidos = {} } = opciones;
     const numProducto = normalizarNumero(opciones.numero ?? numeroDe(texto));
+    const serieProducto = opciones.serie !== undefined ? normalizarSerie(opciones.serie) : serieDe(texto);
+    const aniosProducto = aniosDe(texto);
     const toks = tokens(texto);
+    for (const y of aniosProducto) if (!toks.includes(y)) toks.push(y); // "11 Dodge" también busca modelos de 2011
     for (const t of [...toks]) if (aprendidos[t] && !toks.includes(aprendidos[t])) toks.push(aprendidos[t]);
     const setProducto = new Set(toks);
     const salida = [];
     for (const key of confirmados) {
       const g = grupos.get(key);
-      if (g) salida.push(resumen(g, 1, true, numProducto, setProducto));
+      if (g) salida.push(resumen(g, 1, true, numProducto, serieProducto, aniosProducto));
     }
     const vistos = new Set([...confirmados, ...rechazados]);
     const posibles = new Set();
     for (const t of toks) for (const g of indice.get(t) || []) if (!vistos.has(g.key)) posibles.add(g);
     const puntuados = [...posibles]
       .filter((g) => pasaReglas(g, setProducto))
-      .map((g) => resumen(g, puntaje(g, toks, marca), false, numProducto, setProducto))
+      .map((g) => resumen(g, puntaje(g, toks, marca), false, numProducto, serieProducto, aniosProducto))
       .filter((r) => r.score >= minimo * 100)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => Number(a.otroAnio) - Number(b.otroAnio) || b.score - a.score) // los de otro año, al final
       .slice(0, Math.max(0, max - salida.length));
     salida.push(...puntuados);
     return salida;
   }
 
-  return { buscar, totalModelos: grupos.size, totalAvistamientos: base.length };
+  return { buscar, serieDe, totalModelos: grupos.size, totalAvistamientos: base.length };
 }

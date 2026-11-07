@@ -69,6 +69,8 @@
     .mio img { max-height: 260px; }
     button { padding: 8px 12px; font-size: 14px; }
     .av img { width: 76px; height: 76px; }
+    .av-foto { width: 76px; height: 76px; }
+    .av-foto.acercada { width: 78px; height: 104px; }
     .acciones input[type=number] { flex: 1; min-width: 0; }
     .acciones button.primario { flex: 1; }
     .filtro { padding: 6px 11px; }
@@ -105,6 +107,12 @@
   .avist { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .av { display: flex; gap: 8px; align-items: center; border: 1px solid var(--borde); border-radius: 8px; padding: 4px 8px 4px 4px; background: #fff; font-size: 12px; }
   .av img { width: 90px; height: 90px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
+  /* Miniatura acercada a la posición del carrito (misma cuadrícula estimada que el visor) */
+  .av-foto { position: relative; flex: none; width: 90px; height: 90px; border-radius: 6px; overflow: hidden; background: var(--fondo); }
+  .av-foto img { display: block; }
+  .av-foto.acercada { width: 96px; height: 128px; }
+  .av-foto.acercada img { position: absolute; max-width: none; object-fit: fill; border-radius: 0; }
+  .av-foto .pos-mini { position: absolute; left: 3px; top: 3px; background: #facc15; color: #1c1917; font: 600 10px/1 -apple-system, system-ui, sans-serif; padding: 2px 4px; border-radius: 4px; pointer-events: none; }
   .av .sinfoto { width: 56px; height: 56px; border-radius: 6px; background: var(--fondo); display: grid; place-items: center; color: var(--suave); font-size: 10px; text-align: center; }
   .av b { font-size: 14px; }
   .av.confirmada { border-color: var(--verde); background: #f0fdf4; }
@@ -126,6 +134,10 @@
   .datos-tarjeta { color: var(--suave); font-size: 11px; }
   .datos-tarjeta .num { color: var(--texto); font-size: 12px; }
   .chip.oro { background: #fef9c3; color: #854d0e; font-weight: 600; }
+  details.plegadas { margin-top: 8px; }
+  details.plegadas > summary { cursor: pointer; font-size: 12px; color: var(--suave); padding: 4px 0; user-select: none; }
+  details.plegadas > summary:hover { color: var(--texto); }
+  details.plegadas[open] > summary { margin-bottom: 4px; }
   .chip.reciente { background: #ccfbf1; color: #0f766e; font-weight: 600; }
   .visor-barra a { color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; padding: 7px 12px; text-decoration: none; background: rgba(255,255,255,.12); }
   .vacio { color: var(--suave); font-style: italic; padding: 8px 0; }
@@ -255,6 +267,7 @@
   <div class="barra">
     <input type="search" id="texto" placeholder="Buscar en mis productos…" style="flex:1;min-width:180px">
     <select id="depto"><option value="">Todos los departamentos</option></select>
+    <button id="btn-mini" type="button" title="Acercar cada foto a la posición del carrito, o verlas completas">Miniaturas: acercadas</button>
   </div>
 </header>
 <main>
@@ -481,7 +494,7 @@ function pintarFiltros() {
 
 function htmlAvistamiento(a, c) {
   const img = a.tieneFoto
-    ? `<img src="/foto/${a.i}?v=${versionBase}" loading="lazy" alt="" data-foto="${a.i}" data-key="${esc(c.key)}" data-clave="${esc(a.clave)}" data-score="${c.score}" data-ok="${a.fotoConfirmada ? 1 : 0}" data-ver="${a.otraVersion ? 1 : 0}" data-pos="${esc(a.posiciones || '')}" data-total="${a.totalFoto || 0}" data-url="${esc(a.url || '')}" data-pie="${esc(`${a.vendedor} · ${fecha(a.fecha)} · ${a.posiciones ? 'posición ' + a.posiciones + ' · ' : ''}${dinero(a.precio)}`)}">`
+    ? `<div class="av-foto"><img src="/foto/${a.i}?v=${versionBase}" loading="lazy" alt="" data-foto="${a.i}" data-key="${esc(c.key)}" data-clave="${esc(a.clave)}" data-score="${c.score}" data-ok="${a.fotoConfirmada ? 1 : 0}" data-ver="${a.otraVersion ? 1 : 0}" data-pos="${esc(a.posiciones || '')}" data-total="${a.totalFoto || 0}" data-url="${esc(a.url || '')}" data-pie="${esc(`${a.vendedor} · ${fecha(a.fecha)} · ${a.posiciones ? 'posición ' + a.posiciones + ' · ' : ''}${dinero(a.precio)}`)}"></div>`
     : `<div class="sinfoto">sin foto</div>`;
   const datos = `data-key="${esc(c.key)}" data-clave="${esc(a.clave)}" data-score="${c.score}"`;
   const botones = a.fotoConfirmada
@@ -493,8 +506,10 @@ function htmlAvistamiento(a, c) {
   const datosTarjeta = [a.numero ? `<b class="num">${esc(a.numero)}</b>` : '', a.serie ? esc(a.serie) : ''].filter(Boolean).join(' · ');
   const marcas = [
     a.nuevo ? '<span class="chip nuevo">nuevo</span>' : '',
-    a.mismoNumero ? '<span class="chip verde">✓ mismo número</span>' : '',
+    a.nivel === 1 ? '<span class="chip verde">✓ serie y número</span>' : a.mismoNumero ? '<span class="chip verde">✓ mismo número</span>' : '',
+    a.nivel !== 1 && a.mismaSerie ? '<span class="chip verde">✓ misma serie</span>' : '',
     a.otroNumero ? '<span class="chip ambar">otro número</span>' : '',
+    a.otraSerie ? '<span class="chip ambar">otra serie</span>' : '',
     a.especial ? '<span class="chip oro">★ especial</span>' : '',
   ].join('');
   const extra = [
@@ -515,12 +530,19 @@ function htmlCandidato(c, desdeBusqueda = false) {
         <div class="cand-nombre">${esc(c.nombre)} <span class="chip gris">${esc(c.marca)}</span>
           ${c.confirmado ? '<span class="chip verde">confirmado</span>' : `<span class="chip ${c.score >= 80 ? 'verde' : c.score >= 60 ? 'azul' : 'ambar'}">${c.score}% parecido</span>`}
           ${c.mismoNumero ? '<span class="chip verde">✓ mismo número</span>' : c.otroNumero ? '<span class="chip ambar">otro número</span>' : ''}
-          ${c.mismaSerie ? '<span class="chip azul">misma serie</span>' : ''}</div>
+          ${c.mismaSerie ? '<span class="chip azul">misma serie</span>' : ''}
+          ${c.otroAnio ? '<span class="chip ambar">otro año</span>' : ''}</div>
         <div class="cand-info">${rango} · visto ${c.veces} ${c.veces === 1 ? 'vez' : 'veces'} · ${c.vendedores.map(esc).join(', ')}</div>
       </div>
       <div class="botones">${botones}</div>
     </div>
-    <div class="avist">${c.avistamientos.map((a) => htmlAvistamiento(a, c)).join('')}</div>
+    ${(() => {
+      // Nivel 4 (otra serie u otro número, leídos): plegadas al final, a un clic. Nunca se ocultan solas.
+      const vis = c.avistamientos.filter((a) => a.nivel !== 4);
+      const pleg = c.avistamientos.filter((a) => a.nivel === 4);
+      return (vis.length ? `<div class="avist">${vis.map((a) => htmlAvistamiento(a, c)).join('')}</div>` : '')
+        + (pleg.length ? `<details class="plegadas"><summary>${pleg.length} ${pleg.length === 1 ? 'foto' : 'fotos'} con otra serie u otro número ▸</summary><div class="avist">${pleg.map((a) => htmlAvistamiento(a, c)).join('')}</div></details>` : '');
+    })()}
     ${c.ocultas ? `<div class="ocultas">${c.ocultas} foto(s) que marcaste como "no es" están ocultas.</div>` : ''}
   </div>`;
 }
@@ -558,7 +580,15 @@ function htmlTarjeta(p) {
       <div>${chips}</div>
     </div>
     <div>
-      ${p.candidatos.length ? p.candidatos.map((x) => htmlCandidato(x)).join('') : '<div class="vacio">No encontré este carrito en la base. Prueba con otro nombre:</div>'}
+      ${(() => {
+        // Coincidencias de otro año ('70 Dodge Charger para tu '11): al final, plegadas
+        const mismos = p.candidatos.filter((x) => !x.otroAnio);
+        const otros = p.candidatos.filter((x) => x.otroAnio);
+        const arriba = mismos.length
+          ? mismos.map((x) => htmlCandidato(x)).join('')
+          : `<div class="vacio">${otros.length ? 'No encontré este carrito con el mismo año.' : 'No encontré este carrito en la base.'} Prueba con otro nombre:</div>`;
+        return arriba + (otros.length ? `<details class="plegadas"><summary>${otros.length} ${otros.length === 1 ? 'coincidencia' : 'coincidencias'} de otro año ▸</summary>${otros.map((x) => htmlCandidato(x)).join('')}</details>` : '');
+      })()}
       <div class="buscar-otro">
         <input type="search" placeholder="Buscar otro nombre en la base…" data-buscar>
         <button data-accion="buscar">Buscar</button>
@@ -591,6 +621,63 @@ function reemplazarTarjeta(p) {
 }
 
 // ---------- visor de fotos (acercar, mover y pasar entre fotos) ----------
+// Cuadrícula estimada (columnas × renglones) con cuántos carritos trae la foto y su forma;
+// las tarjetas son verticales (~0.72 de ancho por alto). Las posiciones van en orden de lectura.
+function cuadricula(n, w, h) {
+  let mejor = { c: n, r: 1, d: Infinity };
+  for (let c = 1; c <= n; c++) {
+    const r = Math.ceil(n / c);
+    if (c * r - n >= Math.min(c, r)) continue; // demasiados huecos
+    const d = Math.abs(Math.log((w / c) / (h / r) / 0.72));
+    if (d < mejor.d) mejor = { c, r, d };
+  }
+  return mejor;
+}
+
+// ---------- miniaturas acercadas a la posición ----------
+const MARGEN_MINI = 0.15; // margen alrededor de la posición, en fracción de una celda (deja ver la orilla de los vecinos)
+let miniAcercadas = true;
+try { miniAcercadas = localStorage.getItem('miniAcercadas') !== '0'; } catch {}
+function acercarMiniatura(img) {
+  const caja = img.parentElement;
+  if (!caja?.classList.contains('av-foto')) return;
+  caja.querySelector('.pos-mini')?.remove();
+  const total = Number(img.dataset.total) || 0;
+  const pos = String(img.dataset.pos || '').split(/[,\s]+/).map(Number).filter((n) => n > 0);
+  const nw = img.naturalWidth, nh = img.naturalHeight;
+  const aplica = miniAcercadas && nw && nh && total > 1 && pos.length && pos.every((p) => p <= total);
+  caja.classList.toggle('acercada', !!aplica);
+  if (!aplica) { img.removeAttribute('style'); return; }
+  const { c, r } = cuadricula(total, nw, nh);
+  let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  for (const p of pos) {
+    const fila = Math.floor((p - 1) / c), col = (p - 1) % c;
+    x0 = Math.min(x0, col / c); x1 = Math.max(x1, (col + 1) / c);
+    y0 = Math.min(y0, fila / r); y1 = Math.max(y1, (fila + 1) / r);
+  }
+  x0 = Math.max(0, x0 - MARGEN_MINI / c); x1 = Math.min(1, x1 + MARGEN_MINI / c);
+  y0 = Math.max(0, y0 - MARGEN_MINI / r); y1 = Math.min(1, y1 + MARGEN_MINI / r);
+  const W = caja.clientWidth, H = caja.clientHeight;
+  const escala = Math.min(W / ((x1 - x0) * nw), H / ((y1 - y0) * nh));
+  const w = nw * escala, h = nh * escala;
+  Object.assign(img.style, {
+    width: w + 'px', height: h + 'px',
+    left: (W / 2 - ((x0 + x1) / 2) * w) + 'px',
+    top: (H / 2 - ((y0 + y1) / 2) * h) + 'px',
+  });
+  caja.insertAdjacentHTML('beforeend', `<span class="pos-mini">pos. ${pos.join(', ')}</span>`);
+}
+// Cada miniatura se acerca al terminar de cargar (también al volver a pintar la lista)
+document.addEventListener('load', (e) => { if (e.target.matches?.('.av-foto img')) acercarMiniatura(e.target); }, true);
+function pintarBotonMini() { $('#btn-mini').textContent = `Miniaturas: ${miniAcercadas ? 'acercadas' : 'completas'}`; }
+pintarBotonMini();
+$('#btn-mini').addEventListener('click', () => {
+  miniAcercadas = !miniAcercadas;
+  try { localStorage.setItem('miniAcercadas', miniAcercadas ? '1' : '0'); } catch {}
+  pintarBotonMini();
+  document.querySelectorAll('.av-foto img').forEach((img) => { if (img.complete) acercarMiniatura(img); });
+});
+
 const visor = (() => {
   const raiz = $('#visor');
   const lienzo = $('.visor-lienzo', raiz);
@@ -613,16 +700,7 @@ const visor = (() => {
   // y su forma; las tarjetas son verticales (~0.72 de ancho por alto). Las posiciones van en orden de lectura.
   let resaltar = true;
   try { resaltar = localStorage.getItem('visorResaltar') !== '0'; } catch {}
-  function cuadricula(n, w, h) {
-    let mejor = { c: n, r: 1, d: Infinity };
-    for (let c = 1; c <= n; c++) {
-      const r = Math.ceil(n / c);
-      if (c * r - n >= Math.min(c, r)) continue; // demasiados huecos
-      const d = Math.abs(Math.log((w / c) / (h / r) / 0.72));
-      if (d < mejor.d) mejor = { c, r, d };
-    }
-    return mejor;
-  }
+  // (la cuadrícula está arriba, en cuadricula(): la comparten el visor y las miniaturas)
   function pintarMarcas(f) {
     const b = $('[data-v=resaltar]', raiz);
     const aplica = !!(f && f.pos?.length && f.total > 1 && f.pos.every((p) => p <= f.total));
