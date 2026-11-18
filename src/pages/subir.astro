@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import AvisoDuplicados from '../components/AvisoDuplicados.astro';
 ---
 <Layout titulo="Subir producto - HG Shop MX" noIndex={true}>
   <main class="px-4 py-6 max-w-md mx-auto">
@@ -16,6 +17,8 @@ import Layout from '../layouts/Layout.astro';
     <div id="contenido-principal" class="hidden">
       <h1 class="text-xl font-semibold text-neutral-900">Armar producto</h1>
       <p class="text-sm text-neutral-500 mt-1">Agrega 1 o más fotos del mismo producto, luego analiza</p>
+
+      <AvisoDuplicados />
 
       <div class="mt-6">
         <label class="block">
@@ -738,6 +741,8 @@ import Layout from '../layouts/Layout.astro';
       // Se ajusta después de mostrar el formulario: oculto mide 0 de alto.
       ajustarAlturaTextarea(campoDescripcion);
       ajustarAlturaTextarea(campoPalabrasClave);
+      // Avisa a AvisoDuplicados.astro que ya hay titulo y palabras clave que revisar
+      document.dispatchEvent(new CustomEvent('hgshop:analizado'));
     } catch (error: any) {
       estadoAnalisis.textContent = `Ocurrió un error inesperado: ${error.message}. Intenta de nuevo.`;
     } finally {

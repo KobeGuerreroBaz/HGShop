@@ -163,18 +163,16 @@ export function crearBuscador(base) {
 
   // Series que existen en la base (normalizadas), para encontrar la serie de tu carrito en su título
   const seriesBase = [...new Set(base.map((a) => normalizarSerie(a.serie)).filter((x) => x.length >= 4))];
+  const contiene = (texto, s) => new RegExp(`(^|[^a-z0-9])${escaparRegex(s)}($|[^a-z0-9])`).test(texto);
   /**
-   * La serie exacta de tu carrito según su título. Si el texto de una serie aparece solo como parte de otra
-   * ("HW Race" dentro de "HW Race Day"), la de tu carrito es la que cubre el texto completo.
+   * Las series de la base que aparecen COMPLETAS en el título de tu carrito (puede haber varias:
+   * "…Volkswagen Beetle… Peeps" trae "volkswagen" y "peeps"). Una serie que solo aparece como parte
+   * de otra que también está ("HW Race" dentro de "HW Race Day") no cuenta.
    */
-  function serieDe(texto) {
+  function seriesDe(texto) {
     const t = normalizarSerie(texto);
-    let mejor = '';
-    for (const s of seriesBase) {
-      if (s.length <= mejor.length) continue;
-      if (new RegExp(`(^|[^a-z0-9])${escaparRegex(s)}($|[^a-z0-9])`).test(t)) mejor = s;
-    }
-    return mejor;
+    const halladas = seriesBase.filter((s) => contiene(t, s));
+    return halladas.filter((s) => !halladas.some((o) => o !== s && contiene(o, s)));
   }
 
   const indice = new Map();
@@ -223,16 +221,20 @@ export function crearBuscador(base) {
    *  4 = algo leído no coincide (otro número, u otra serie sin número que lo salve) → la página las pliega
    * Las fotos se ordenan por nivel y, dentro de cada nivel, de la más reciente a la más vieja.
    */
-  function compararFotos(g, numProducto, serieProducto) {
+  function compararFotos(g, numProducto, seriesProducto) {
     const sinHW = (x) => x.replace(/^hw\s+/, '');
+    // Una serie que es parte del nombre del modelo ("Volkswagen" en "Volkswagen Beetle") no cuenta como serie aquí
+    const nombres = [...g.nombres.keys()].map(normalizarSerie);
+    const series = seriesProducto.filter((x) => !nombres.some((nm) => contiene(nm, x)));
+    const hay = series.length > 0;
     const av = g.avistamientos.map((a) => {
       const n = normalizarNumero(a.numero);
       const s = normalizarSerie(a.serie);
       const mismoNumero = !!(numProducto && n && n === numProducto);
       const otroNumero = !!(numProducto && n && n !== numProducto);
-      const mismaSerie = !!(serieProducto && s && s === serieProducto);
-      const soloHW = !!(serieProducto && s && !mismaSerie && sinHW(s) === sinHW(serieProducto));
-      const otraSerie = !!(serieProducto && s && !mismaSerie && !soloHW);
+      const mismaSerie = !!(hay && s && series.includes(s));
+      const soloHW = !!(hay && s && !mismaSerie && series.some((x) => sinHW(x) === sinHW(s)));
+      const otraSerie = !!(hay && s && !mismaSerie && !soloHW);
       const nivel = mismoNumero && mismaSerie ? 1
         : mismoNumero ? 2
         : mismaSerie && !otroNumero ? 2
@@ -244,8 +246,8 @@ export function crearBuscador(base) {
     return av;
   }
 
-  function resumen(g, score, confirmado = false, numProducto = '', serieProducto = '', aniosProducto = []) {
-    const avistamientos = compararFotos(g, numProducto, serieProducto);
+  function resumen(g, score, confirmado = false, numProducto = '', seriesProducto = [], aniosProducto = []) {
+    const avistamientos = compararFotos(g, numProducto, seriesProducto);
     const precios = avistamientos.map((a) => a.precio).filter((p) => typeof p === 'number');
     const mismoNumero = avistamientos.some((a) => a.mismoNumero);
     const otroNumero = !mismoNumero && avistamientos.some((a) => a.otroNumero);
@@ -286,7 +288,7 @@ export function crearBuscador(base) {
   function buscar(texto, opciones = {}) {
     const { marca = null, confirmados = [], rechazados = [], max = 5, minimo = 0.4, aprendidos = {} } = opciones;
     const numProducto = normalizarNumero(opciones.numero ?? numeroDe(texto));
-    const serieProducto = opciones.serie !== undefined ? normalizarSerie(opciones.serie) : serieDe(texto);
+    const seriesProducto = opciones.serie !== undefined ? [normalizarSerie(opciones.serie)].filter(Boolean) : seriesDe(texto);
     const aniosProducto = aniosDe(texto);
     const toks = tokens(texto);
     for (const y of aniosProducto) if (!toks.includes(y)) toks.push(y); // "11 Dodge" también busca modelos de 2011
@@ -295,14 +297,14 @@ export function crearBuscador(base) {
     const salida = [];
     for (const key of confirmados) {
       const g = grupos.get(key);
-      if (g) salida.push(resumen(g, 1, true, numProducto, serieProducto, aniosProducto));
+      if (g) salida.push(resumen(g, 1, true, numProducto, seriesProducto, aniosProducto));
     }
     const vistos = new Set([...confirmados, ...rechazados]);
     const posibles = new Set();
     for (const t of toks) for (const g of indice.get(t) || []) if (!vistos.has(g.key)) posibles.add(g);
     const puntuados = [...posibles]
       .filter((g) => pasaReglas(g, setProducto))
-      .map((g) => resumen(g, puntaje(g, toks, marca), false, numProducto, serieProducto, aniosProducto))
+      .map((g) => resumen(g, puntaje(g, toks, marca), false, numProducto, seriesProducto, aniosProducto))
       .filter((r) => r.score >= minimo * 100)
       .sort((a, b) => Number(a.otroAnio) - Number(b.otroAnio) || b.score - a.score) // los de otro año, al final
       .slice(0, Math.max(0, max - salida.length));
@@ -310,5 +312,5 @@ export function crearBuscador(base) {
     return salida;
   }
 
-  return { buscar, serieDe, totalModelos: grupos.size, totalAvistamientos: base.length };
+  return { buscar, seriesDe, totalModelos: grupos.size, totalAvistamientos: base.length };
 }

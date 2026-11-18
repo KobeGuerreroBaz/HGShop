@@ -24,6 +24,9 @@ const MODELO_RESPALDO = 'gemini-flash-lite-latest';
 
 const urlModelo = (modelo) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
+// Tope de tokens de salida por llamada (incluye el razonamiento). Una respuesta normal es un JSON de unos cientos
+// de tokens; si Gemini se pone a divagar, Google lo corta aquí y se cae al plan B en vez de seguir cobrando.
+const MAXIMO_TOKENS_SALIDA = 3000;
 const TIEMPO_MAXIMO_CON_BUSQUEDA_MS = 30000;
 const TIEMPO_MAXIMO_SIN_BUSQUEDA_MS = 30000;
 const MAXIMO_FUENTES = 5;
@@ -175,6 +178,7 @@ async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqu
     generationConfig: {
       responseMimeType: 'application/json',
       responseJsonSchema: ESQUEMA_RESPUESTA,
+      maxOutputTokens: MAXIMO_TOKENS_SALIDA,
     },
   };
   if (conBusqueda) {
@@ -199,6 +203,9 @@ async function llamarGemini({ apiKey, imagenBase64, mimeType, contexto, conBusqu
   }
 
   const candidato = json?.candidates?.[0];
+  if (candidato?.finishReason === 'MAX_TOKENS') {
+    throw new Error(`Gemini se cortó en el tope de ${MAXIMO_TOKENS_SALIDA} tokens de salida`);
+  }
   const datos = parsearJson(extraerTexto(candidato));
   if (!esRespuestaValida(datos)) {
     throw new Error('Gemini devolvio una respuesta incompleta o con JSON roto');

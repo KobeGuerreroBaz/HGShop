@@ -28,6 +28,10 @@ export const POST: APIRoute = async ({ request }) => {
   if (!archivo) {
     return jsonError('No se recibio ninguna foto');
   }
+  // El navegador ya comprime la foto (unos cientos de KB); esto solo evita mandar a Gemini archivos enormes.
+  if (archivo.size > 8 * 1024 * 1024) {
+    return jsonError('La foto pesa mas de 8 MB', 413);
+  }
 
   try {
     const buffer = await archivo.arrayBuffer();

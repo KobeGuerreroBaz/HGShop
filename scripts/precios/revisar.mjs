@@ -18,7 +18,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { exec, spawn } from 'child_process';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { createClient } from '@sanity/client';
 import { crearBuscador, marcaCanonica, tokens, distintivas, numeroDe } from '../../src/lib/emparejar-precios.mjs';
 import { armarBase, leerAlbum, CARPETA_SCRAPER_DEFECTO, ARCHIVO_REVISION, claveFila, leerRevision, listarPorRevisar, limpiarUrlFacebook } from './armar-base.mjs';
@@ -248,11 +248,24 @@ function albumPorLink(link) {
   const { set, fbid } = idsDeLink(link);
   if (!set && !fbid) return null;
   const maestro = leerJson(ARCHIVO_MAESTRO, { albumes: [], filas: [] });
+  const encontrado = (nombre) => {
+    const filas = (maestro.filas || []).filter((f) => f.album === nombre).length;
+    return { nombre, ...leerAlbum(nombre), filas };
+  };
   for (const nombre of maestro.albumes || []) {
     const ids = idsDeLink(linkDeAlbum(nombre));
-    if ((set && ids.set === set) || (fbid && ids.fbid === fbid)) {
-      const filas = (maestro.filas || []).filter((f) => f.album === nombre).length;
-      return { nombre, ...leerAlbum(nombre), filas };
+    if ((set && ids.set === set) || (fbid && ids.fbid === fbid)) return encontrado(nombre);
+  }
+  // Cualquier foto ya procesada (no solo la primera): sirve con links de álbum (set=a.…) y de publicación (set=pcb.…)
+  const porFoto = fbid ? fotosProcesadasFb().get(fbid) : null;
+  if (porFoto) return encontrado(porFoto);
+  // Link de álbum de Facebook: se busca ese álbum en las listas de listar_albumes.mjs y se comparan sus fotos
+  const idAlbum = (String(link).match(/[?&]set=a\.(\d+)/) || [])[1];
+  if (idAlbum) {
+    for (const vendedor of Object.keys(leerJson(ARCHIVO_VENDEDORES_FB, {}))) {
+      const a = (leerJson(path.join(CARPETA_ALBUMES_FB, `${slug(vendedor)}.json`), {}).albumes || []).find((x) => x.id === idAlbum);
+      const c = a ? coincidenciaFb(a.fotosIds, fotosProcesadasFb()) : null;
+      if (c) return encontrado(c);
     }
   }
   return null;
@@ -282,10 +295,17 @@ function historialAlbumes() {
   }
   // Datos extra de cada álbum: fotos leídas (archivos de debug), omitidos y link de Facebook de la primera foto
   const fotosPorAlbum = {};
+  const procesadoPorAlbum = {}; // hora en que el scraper guardó por última vez una foto del álbum
   try {
-    for (const n of fs.readdirSync(path.join(CARPETA_SCRAPER, 'debug'))) {
+    const carpetaDebug = path.join(CARPETA_SCRAPER, 'debug');
+    for (const n of fs.readdirSync(carpetaDebug)) {
       const m = n.match(/^(.+)_foto_\d{3}\.json$/);
-      if (m) fotosPorAlbum[m[1]] = (fotosPorAlbum[m[1]] || 0) + 1;
+      if (!m) continue;
+      fotosPorAlbum[m[1]] = (fotosPorAlbum[m[1]] || 0) + 1;
+      try {
+        const hora = fs.statSync(path.join(carpetaDebug, n)).mtimeMs;
+        if (hora > (procesadoPorAlbum[m[1]] || 0)) procesadoPorAlbum[m[1]] = hora;
+      } catch {}
     }
   } catch {}
   const omitidosPorAlbum = {};
@@ -297,6 +317,7 @@ function historialAlbumes() {
     fotos: fotosPorAlbum[nombre] || 0,
     omitidos: omitidosPorAlbum[nombre] || 0,
     url: linkDeAlbum(nombre),
+    procesadoEn: procesadoPorAlbum[nombre] ? new Date(procesadoPorAlbum[nombre]).toISOString() : null,
   }));
   const extra = leerJson(ARCHIVO_VENDEDORES, []);
   const vendedores = [...new Set([...albumes.map((a) => a.vendedor), ...extra])].sort();
@@ -304,19 +325,167 @@ function historialAlbumes() {
     vendedor: v,
     albumes: albumes.filter((a) => a.vendedor === v).sort((x, y) => String(y.fecha).localeCompare(String(x.fecha))),
   }));
-  return { grupos, vendedores, nombres: albumes.map((a) => a.nombre) };
+  // Último álbum procesado de cada vendedor (el más reciente por hora de proceso, no por fecha del álbum)
+  const ultimos = grupos
+    .map((g) => {
+      const u = g.albumes.filter((a) => a.procesadoEn).sort((x, y) => y.procesadoEn.localeCompare(x.procesadoEn))[0];
+      if (!u) return null;
+      u.ultimo = true;
+      return { vendedor: g.vendedor, nombre: u.nombre, fecha: u.fecha, numero: u.numero, procesadoEn: u.procesadoEn, url: u.url, filas: u.filas };
+    })
+    .filter(Boolean)
+    .sort((x, y) => y.procesadoEn.localeCompare(x.procesadoEn));
+  return { grupos, vendedores, nombres: albumes.map((a) => a.nombre), ultimos };
+}
+
+// ---------- Álbumes de Facebook por vendedor (los arma ~/Desktop/scraper-hotwheels/listar_albumes.mjs) ----------
+const ARCHIVO_VENDEDORES_FB = path.join(CARPETA_SCRAPER, 'vendedores_fb.json'); // { "Alain Rodriguez": "link de su página de Álbumes" }
+const CARPETA_ALBUMES_FB = path.join(CARPETA_SCRAPER, 'albumes_fb');
+let cacheFotosFb = { clave: '', mapa: new Map() };
+/** fbid de cada foto ya procesada → álbum (solo álbumes guardados en el maestro). Se rehace solo cuando cambian debug/ o el maestro. */
+function fotosProcesadasFb() {
+  const carpeta = path.join(CARPETA_SCRAPER, 'debug');
+  let clave;
+  try { clave = `${fs.statSync(carpeta).mtimeMs}|${fs.statSync(ARCHIVO_MAESTRO).mtimeMs}`; } catch { return new Map(); }
+  if (cacheFotosFb.clave === clave) return cacheFotosFb.mapa;
+  const guardados = new Set(leerJson(ARCHIVO_MAESTRO, { albumes: [] }).albumes || []);
+  const mapa = new Map();
+  for (const n of fs.readdirSync(carpeta)) {
+    const m = n.match(/^(.+)_foto_\d{3}\.json$/);
+    if (!m || !guardados.has(m[1])) continue; // las pruebas de 3 fotos no cuentan
+    const id = idsDeLink(leerJson(path.join(carpeta, n), {}).url).fbid;
+    if (id) mapa.set(id, m[1]);
+  }
+  cacheFotosFb = { clave, mapa };
+  return mapa;
+}
+/** ¿Qué álbum procesado tiene estas fotos? El que más comparta. */
+function coincidenciaFb(fbids, procesadas) {
+  const votos = {};
+  for (const id of fbids || []) {
+    const a = procesadas.get(id);
+    if (a) votos[a] = (votos[a] || 0) + 1;
+  }
+  return Object.entries(votos).sort((x, y) => y[1] - x[1])[0]?.[0] || null;
+}
+/** Pendientes de cada vendedor según su lista de Facebook, revisando AHORA qué ya está procesado. */
+function listasFacebook() {
+  const vendedores = leerJson(ARCHIVO_VENDEDORES_FB, {});
+  const procesadas = fotosProcesadasFb();
+  return Object.keys(vendedores).map((vendedor) => {
+    const datos = leerJson(path.join(CARPETA_ALBUMES_FB, `${slug(vendedor)}.json`), null);
+    if (!datos) return { vendedor, sinLista: true };
+    const albumes = (datos.albumes || []).slice().sort((x, y) => (x.orden ?? 1e9) - (y.orden ?? 1e9));
+    const carritos = albumes.filter((a) => !a.ignorado).map((a) => ({ ...a, procesado: coincidenciaFb(a.fotosIds, procesadas) }));
+    const idx = carritos.map((a, i) => (a.procesado ? i : -1)).filter((i) => i >= 0);
+    const primero = idx.length ? idx[0] : carritos.length;
+    const ultimo = idx.length ? idx[idx.length - 1] : -1;
+    const corto = (a) => ({ id: a.id, titulo: a.titulo, fotos: a.fotos ?? null, fecha: a.fecha || null, link: a.primeraFoto || null });
+    const atras = carritos.filter((a, i) => !a.procesado && i > ultimo);
+    return {
+      vendedor,
+      actualizado: datos.actualizado || null,
+      parcial: !!datos.parcial,
+      ignorados: albumes.length - carritos.length,
+      procesados: idx.length,
+      nuevos: carritos.filter((a, i) => !a.procesado && i < primero).map(corto),
+      huecos: carritos.filter((a, i) => !a.procesado && i > primero && i < ultimo).map(corto),
+      haciaAtras: atras.slice(0, 40).map(corto),
+      totalAtras: atras.length,
+    };
+  });
+}
+
+/** Corre listar_albumes.mjs de un vendedor (usa la misma sesión de Facebook que los álbumes: uno a la vez). */
+function correrLista(vendedor) {
+  Object.assign(trabajo, { activo: true, tipo: 'lista', lineas: [], album: `Lista de álbumes de ${vendedor}`, vendedor, prueba: false, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
+  const agregar = (texto) => {
+    for (const l of String(texto).split(/\r?\n|\r/)) {
+      if (!l.trim()) continue;
+      trabajo.lineas.push(l.trimEnd());
+      if (/pide login|No veo la foto/i.test(l)) trabajo.esperandoLogin = true;
+    }
+    if (trabajo.lineas.length > 800) trabajo.lineas.splice(0, trabajo.lineas.length - 800);
+  };
+  agregar(`$ node listar_albumes.mjs "${vendedor}"`);
+  proceso = spawn(process.execPath, [path.join(CARPETA_SCRAPER, 'listar_albumes.mjs'), vendedor], { cwd: CARPETA_SCRAPER, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  proceso.stdout.on('data', agregar);
+  proceso.stderr.on('data', agregar);
+  proceso.on('close', (codigo) => {
+    Object.assign(trabajo, { codigo, activo: false, esperandoLogin: false, fin: new Date().toISOString() });
+    proceso = null;
+  });
+}
+
+// ---------- Preguntas y reglas de precios (módulo reglas.mjs del scraper: ahí viven los datos) ----------
+let reglasMod = null;
+try { reglasMod = await import(pathToFileURL(path.join(CARPETA_SCRAPER, 'reglas.mjs')).href); }
+catch (e) { console.log(`(aviso) Sin módulo de reglas de precios: ${e.message}`); }
+const nombreVendedor = (s) => historialAlbumes().vendedores.find((v) => slug(v) === s) || s;
+function datosReglas() {
+  if (!reglasMod) return { dudas: [], reglas: [], significados: {} };
+  const reglas = reglasMod.cargarReglas().reglas;
+  const conNombres = (r) => ({ ...r, nombres: (r.vendedores || []).map((v) => (v === '*' ? 'todos' : nombreVendedor(v))) });
+  const dudas = reglasMod.leerDudas().map((d) => ({
+    ...d,
+    nombre: nombreVendedor(d.vendedor),
+    ejemplos: (d.ejemplos || []).map((e) => {
+      const base = `${e.album}_foto_${String(e.foto).padStart(3, '0')}`;
+      const archivo = ['.jpg', '.png'].map((x) => base + x).find((n) => fs.existsSync(path.join(CARPETA_SCRAPER, 'fotos_hotwheels', n))) || null;
+      return { ...e, archivo };
+    }),
+    // lo que contestaste para esa misma frase con otros vendedores: solo se sugiere, no se aplica
+    sugerencias: reglas.filter((r) => r.frase === d.frase).map(conNombres),
+  }));
+  return { dudas, reglas: reglas.map(conNombres), significados: reglasMod.SIGNIFICADOS };
+}
+/** Rehace álbumes con las reglas de hoy (modo "corregir" del scraper: usa lo ya leído, sin volver a pagar), uno tras otro. */
+function correrCorregir(albumes) {
+  Object.assign(trabajo, { activo: true, tipo: 'corregir', lineas: [], album: `Aplicando tu regla a ${albumes.length} ${albumes.length === 1 ? 'álbum' : 'álbumes'}`, vendedor: '', prueba: false, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
+  const agregar = (texto) => {
+    for (const l of String(texto).split(/\r?\n|\r/)) if (l.trim()) trabajo.lineas.push(l.trimEnd());
+    if (trabajo.lineas.length > 800) trabajo.lineas.splice(0, trabajo.lineas.length - 800);
+  };
+  const cola = [...albumes];
+  let peor = 0;
+  const siguiente = () => {
+    const album = cola.shift();
+    if (!album) {
+      try {
+        const r = recargarBase();
+        trabajo.base = { precios: r.base.length, modelos: buscador.totalModelos };
+        agregar(`Base actualizada: ${r.base.length} precios. Recarga la página para ver los precios nuevos.`);
+      } catch (e) { agregar(`[X] No pude actualizar la base: ${e.message}`); }
+      Object.assign(trabajo, { codigo: peor, activo: false, fin: new Date().toISOString() });
+      proceso = null;
+      return;
+    }
+    agregar(`$ node extraer_album.mjs corregir ${album}`);
+    proceso = spawn(process.execPath, [path.join(CARPETA_SCRAPER, 'extraer_album.mjs'), 'corregir', album], { cwd: CARPETA_SCRAPER, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    proceso.stdout.on('data', agregar);
+    proceso.stderr.on('data', agregar);
+    proceso.on('close', (codigo) => { if (codigo) { peor = codigo; cola.length = 0; } siguiente(); });
+  };
+  siguiente();
+}
+/** Después de guardar una regla: quita las dudas contestadas y corrige (sin costo) los álbumes guardados donde salieron. */
+function aplicarRespuesta({ frase, vendedor }) {
+  const guardados = new Set(leerJson(ARCHIVO_MAESTRO, { albumes: [] }).albumes || []);
+  const albumes = reglasMod.quitarDudas({ frase, vendedor }).filter((a) => guardados.has(a));
+  if (albumes.length) correrCorregir(albumes);
+  return albumes.length;
 }
 
 // Un solo álbum a la vez
-const trabajo = { activo: false, lineas: [], album: '', prueba: false, inicio: null, fin: null, codigo: null, costo: null, esperandoLogin: false, base: null };
+const trabajo = { activo: false, tipo: null, lineas: [], album: '', prueba: false, inicio: null, fin: null, codigo: null, costo: null, esperandoLogin: false, base: null };
 let proceso = null;
 
 function correrAlbum({ url, vendedor, fecha, prueba, nombreForzado }) {
   const [anio, mes, dia] = String(fecha).split('-').map(Number);
   // nombreForzado: el link ya era de un álbum guardado, así que se reemplaza ese mismo (no se crea una copia con otro nombre)
-  const nombre = nombreForzado || `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
+  const nombre = nombreForzado || `${slug(vendedor)}-${anio}-${MESES_CORTOS[mes - 1]}${dia}`;
   const args = [path.join(CARPETA_SCRAPER, 'extraer_album.mjs'), prueba ? '3' : '0', url, ...(prueba ? [] : [nombre])];
-  Object.assign(trabajo, { activo: true, lineas: [], album: nombre, vendedor, prueba, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
+  Object.assign(trabajo, { activo: true, tipo: 'album', lineas: [], album: nombre, vendedor, prueba, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
   const agregar = (texto) => {
     for (const l of String(texto).split(/\r?\n/)) {
       if (!l.trim()) continue;
@@ -328,7 +497,7 @@ function correrAlbum({ url, vendedor, fecha, prueba, nombreForzado }) {
     if (trabajo.lineas.length > 800) trabajo.lineas.splice(0, trabajo.lineas.length - 800);
   };
   agregar(`$ node extraer_album.mjs ${prueba ? '3' : '0'} "${url}"${prueba ? '' : ' ' + nombre}`);
-  proceso = spawn(process.execPath, args, { cwd: CARPETA_SCRAPER, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  proceso = spawn(process.execPath, args, { cwd: CARPETA_SCRAPER, env: { ...process.env, VENDEDOR: slug(vendedor) }, stdio: ['pipe', 'pipe', 'pipe'] });
   proceso.stdout.on('data', agregar);
   proceso.stderr.on('data', agregar);
   proceso.on('close', (codigo) => {
@@ -434,6 +603,99 @@ const servidor = http.createServer(async (req, res) => {
       return responder(res, 200, historialAlbumes());
     }
 
+    // --- 👁️ Vision: carritos que el filtro de Vision reconoció sin Gemini (se revisan aquí, no en "Por revisar") ---
+    if (req.method === 'GET' && url.pathname === '/api/vision') {
+      const maestro = leerJson(ARCHIVO_MAESTRO, { filas: [] });
+      const revision = leerRevision(SALIDA);
+      const fotos = path.join(CARPETA_SCRAPER, 'fotos_hotwheels');
+      const archivoDe = (clave) => ['.jpg', '.png'].map((x) => clave + x).find((n) => fs.existsSync(path.join(fotos, n))) || null;
+      const porPos = new Map();
+      for (const f of maestro.filas || []) for (const p of String(f.posiciones || '').split(',').map((x) => Number(x.trim())).filter(Boolean)) porPos.set(`${f.album}_foto_${String(f.foto).padStart(3, '0')}#${p}`, f);
+      const corr = leerJson(path.join(CARPETA_SCRAPER, 'vision_correcciones.json'), {});
+      const filas = (maestro.filas || []).filter((f) => f.fuente === 'vision').map((f) => {
+        const clave = claveFila(f);
+        const ref = porPos.get(`${f.refClave}#${f.refN}`);
+        const refCorr = corr.nombres?.[`${f.refClave}#${f.refN}`];
+        const dec = revision[clave] || null;
+        return {
+          clave, album: f.album, foto: f.foto, pos: Number(String(f.posiciones || '').split(',')[0]) || 1,
+          marca: f.marca || '', modelo: f.modelo || '', serie: f.serie || '', numero: f.numero || '',
+          precio: typeof f.precioUnitario === 'number' ? f.precioUnitario : null,
+          puntaje: f.puntaje || 0, dudoso: !!f.dudoso, revisar: !!f.revisar, notas: f.notas || '', url: f.url || '',
+          archivoFoto: f.archivoFoto || null, cuadricula: f.cuadricula || '3x2',
+          refClave: f.refClave || '', refN: f.refN || 1, refCuadricula: f.refCuadricula || '3x2', refArchivo: f.refClave ? archivoDe(f.refClave) : null,
+          refModelo: refCorr?.modelo || ref?.modelo || '', refPrecio: typeof ref?.precioUnitario === 'number' ? ref.precioUnitario : null,
+          decision: dec ? { accion: dec.accion, cambios: dec.cambios || null } : null,
+        };
+      });
+      const pendientes = filas.filter((f) => (f.dudoso || f.revisar) && !f.decision).length;
+      return responder(res, 200, { filas, pendientes });
+    }
+    // Decisión en la ventana Vision: ok | corregida (no es el mismo) | tarjeta_vieja | deshacer.
+    // Se guarda como cualquier revisión (revision-fotos.json) y, para que el filtro aprenda, en el scraper:
+    // vision_correcciones.json = { nombres: { "<album>_foto_NNN#pos": {modelo, serie, marca} }, malas: ["<referencia>#pos"] }
+    if (req.method === 'POST' && url.pathname === '/api/vision/decidir') {
+      const { clave, accion, cambios } = await leerCuerpo(req);
+      if (!['ok', 'corregida', 'tarjeta_vieja', 'deshacer'].includes(accion)) return responder(res, 400, { error: 'Acción no válida' });
+      const maestro = leerJson(ARCHIVO_MAESTRO, { filas: [] });
+      const fila = (maestro.filas || []).find((f) => f.fuente === 'vision' && claveFila(f) === clave);
+      if (!fila) return responder(res, 404, { error: 'No encuentro esa fila (¿se volvió a correr el álbum?)' });
+      const archivo = path.join(SALIDA, ARCHIVO_REVISION);
+      const revision = leerRevision(SALIDA);
+      const archCorr = path.join(CARPETA_SCRAPER, 'vision_correcciones.json');
+      const corr = leerJson(archCorr, {});
+      corr.nombres ||= {};
+      corr.malas ||= [];
+      const pos = Number(String(fila.posiciones || '').split(',')[0]) || 1;
+      const yo = `${fila.album}_foto_${String(fila.foto).padStart(3, '0')}#${pos}`;
+      const suRef = `${fila.refClave}#${fila.refN}`;
+      // Siempre se empieza limpio: deshacer o cambiar de opinión quita lo que se había aprendido de esta fila
+      delete revision[clave];
+      delete corr.nombres[yo];
+      corr.malas = corr.malas.filter((m) => !(m === suRef && corr.malasDe?.[suRef] === yo));
+      if (corr.malasDe?.[suRef] === yo) delete corr.malasDe[suRef];
+      if (accion === 'ok') revision[clave] = { accion: 'revisada', fecha: new Date().toISOString() };
+      if (accion === 'corregida') {
+        const texto = (v, max) => String(v ?? '').trim().slice(0, max);
+        const c = cambios || {};
+        const modelo = texto(c.modelo, 120);
+        if (!modelo || modelo.startsWith('(')) return responder(res, 400, { error: 'Falta el nombre del modelo' });
+        const precio = typeof fila.precioUnitario === 'number' ? fila.precioUnitario : null;
+        revision[clave] = {
+          accion: 'corregida', fecha: new Date().toISOString(),
+          cambios: { modelo, serie: texto(c.serie, 120), numero: texto(c.numero, 20), precio },
+          antes: { modelo: fila.modelo || '', serie: fila.serie || '', numero: fila.numero || '', precio },
+        };
+        corr.nombres[yo] = { modelo, serie: texto(c.serie, 120), marca: texto(c.marca, 40) || fila.marca || 'Hot Wheels' };
+        if (fila.refClave && !corr.malas.includes(suRef)) {
+          corr.malas.push(suRef);
+          corr.malasDe = { ...(corr.malasDe || {}), [suRef]: yo };
+        }
+        // Vision confundió dos carritos con la misma tarjeta: esa serie tiene marco compartido (Boulevard, Superfast...).
+        // Desde ahora sus carritos van siempre a Gemini. No se espera la respuesta (si falla, no pasa nada grave).
+        try {
+          spawn('python3', [path.join(CARPETA_SCRAPER, 'vision_comparar.py'), 'marco-compartido', yo.split('#')[0], String(pos)], { cwd: CARPETA_SCRAPER, stdio: 'ignore' }).on('error', () => {});
+        } catch {}
+      }
+      if (accion === 'tarjeta_vieja') {
+        revision[clave] = { accion: 'descartada', fecha: new Date().toISOString(), motivo: 'tarjeta vieja' };
+        const r = await new Promise((ok) => {
+          const p = spawn('python3', [path.join(CARPETA_SCRAPER, 'vision_comparar.py'), 'descartar-tarjeta', yo.split('#')[0], String(pos)], { cwd: CARPETA_SCRAPER });
+          let salida = '';
+          p.stdout.on('data', (d) => (salida += d));
+          p.stderr.on('data', (d) => (salida += d));
+          p.on('close', (codigo) => ok({ codigo, salida }));
+          p.on('error', (e) => ok({ codigo: 1, salida: e.message }));
+        });
+        if (r.codigo !== 0 || /"error"/.test(r.salida)) return responder(res, 500, { error: `No pude guardar la tarjeta: ${r.salida.slice(0, 200)}` });
+      }
+      escribirJson(archivo, revision);
+      escribirJson(archCorr, corr);
+      baseDesactualizada = true;
+      console.log(`  Vision: ${accion} → ${clave}`);
+      return responder(res, 200, { ok: true });
+    }
+
     // --- filas "por revisar" de TODOS los álbumes (lee el maestro, no la base) ---
     if (req.method === 'GET' && url.pathname === '/api/porrevisar') {
       const filas = listarPorRevisar({ carpetaScraper: CARPETA_SCRAPER, carpetaSalida: SALIDA, minimo: PRECIO_MINIMO_BASE });
@@ -501,8 +763,8 @@ const servidor = http.createServer(async (req, res) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) return responder(res, 400, { error: 'Falta la fecha del álbum' });
       if (!fs.existsSync(path.join(CARPETA_SCRAPER, 'extraer_album.mjs'))) return responder(res, 500, { error: `No encuentro el scraper en ${CARPETA_SCRAPER}` });
       if (!process.env.GEMINI_API_KEY) return responder(res, 500, { error: 'Falta GEMINI_API_KEY: abre la página con la app "Precios Carritos" o desde una terminal' });
-      const [, mes, dia] = fecha.split('-').map(Number);
-      const nombreBase = `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
+      const [anio, mes, dia] = fecha.split('-').map(Number);
+      const nombreBase = `${slug(vendedor)}-${anio}-${MESES_CORTOS[mes - 1]}${dia}`; // con año: alain-rodriguez-2025-oct25
       // El LINK es lo que identifica al álbum. ¿Ya es de un álbum guardado? (aunque la fecha o el vendedor escritos sean otros).
       // Una prueba de 3 fotos no guarda nada.
       const igual = prueba ? null : albumPorLink(link);
@@ -528,6 +790,34 @@ const servidor = http.createServer(async (req, res) => {
       const igual = albumPorLink(url.searchParams.get('url') || '');
       return responder(res, 200, { album: igual });
     }
+    // Preguntas del scraper (frases junto a un precio que no conoce) y tus reglas
+    if (req.method === 'GET' && url.pathname === '/api/reglas') {
+      return responder(res, 200, datosReglas());
+    }
+    if (req.method === 'POST' && ['/api/reglas/responder', '/api/reglas/activar', '/api/reglas/borrar'].includes(url.pathname)) {
+      if (!reglasMod) return responder(res, 500, { error: `No encuentro reglas.mjs en ${CARPETA_SCRAPER}` });
+      const { frase, significado, vendedor } = await leerCuerpo(req);
+      if (url.pathname.endsWith('/borrar')) {
+        reglasMod.borrarRegla({ frase, significado, vendedor });
+        return responder(res, 200, { ok: true });
+      }
+      // responder = para el vendedor de la duda; activar = para otro vendedor o para todos ("*")
+      if (trabajo.activo) return responder(res, 409, { error: `Espera a que termine "${trabajo.album}" para aplicar la regla` });
+      reglasMod.activarRegla({ frase, significado, vendedor });
+      return responder(res, 200, { ok: true, corrigiendo: aplicarRespuesta({ frase, vendedor }) });
+    }
+    // Álbumes de Facebook pendientes por vendedor (listas de listar_albumes.mjs)
+    if (req.method === 'GET' && url.pathname === '/api/facebook/pendientes') {
+      return responder(res, 200, { listas: listasFacebook() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/facebook/actualizar') {
+      const { vendedor } = await leerCuerpo(req);
+      if (trabajo.activo) return responder(res, 409, { error: `Ya se está procesando "${trabajo.album}"` });
+      if (!leerJson(ARCHIVO_VENDEDORES_FB, {})[vendedor]) return responder(res, 400, { error: `${vendedor} no tiene link de Álbumes en vendedores_fb.json` });
+      if (!fs.existsSync(path.join(CARPETA_SCRAPER, 'listar_albumes.mjs'))) return responder(res, 500, { error: `No encuentro listar_albumes.mjs en ${CARPETA_SCRAPER}` });
+      correrLista(vendedor);
+      return responder(res, 200, { ok: true });
+    }
     if (req.method === 'GET' && url.pathname === '/api/album/estado') {
       const desde = Number(url.searchParams.get('desde') || 0);
       return responder(res, 200, { ...trabajo, total: trabajo.lineas.length, lineas: trabajo.lineas.slice(desde) });
@@ -542,7 +832,7 @@ const servidor = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/apagar') {
       if (!esLocal(req)) return responder(res, 403, { error: 'Solo se puede apagar desde la Mac' });
-      if (trabajo.activo) return responder(res, 409, { error: 'Hay un álbum procesándose; espera a que termine' });
+      if (trabajo.activo) return responder(res, 409, { error: trabajo.tipo === 'lista' ? 'Se está actualizando la lista de álbumes; espera a que termine' : 'Hay un álbum procesándose; espera a que termine' });
       responder(res, 200, { ok: true });
       console.log('Apagado desde la página.');
       setTimeout(() => process.exit(0), 300);

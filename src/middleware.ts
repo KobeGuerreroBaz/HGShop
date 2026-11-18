@@ -3,14 +3,17 @@ import { defineMiddleware } from 'astro:middleware';
 // El sitio no carga scripts de terceros ni usa nonces, así que script-src y
 // style-src necesitan 'unsafe-inline' para no romper los <script> y los pocos
 // style="" inline que ya existen. Aun así, esta política cierra bastante:
-// nada de iframes ajenos, nada de <object>/<embed>, y las imágenes/fuentes
-// quedan limitadas a los dominios que realmente se usan (Sanity, Google Fonts).
+// nada de iframes ajenos, nada de <object>/<embed>, y las imágenes quedan
+// limitadas a Sanity.
+// Debe coincidir con public/_headers, que aplica lo mismo a las páginas
+// estáticas. blob: es para las vistas previas de /subir (URL.createObjectURL).
+// Las fuentes se sirven desde /fonts, ya no desde Google Fonts.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' https://cdn.sanity.io data:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "img-src 'self' https://cdn.sanity.io data: blob:",
   "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",

@@ -1,0 +1,237 @@
+---
+// ---------------------------------------------------------------------------
+// Aviso de productos repetidos para /subir.
+//
+// Hace dos cosas, las dos contra /api/buscar-parecidos:
+//   1. Buscador manual: escribes "porsche" antes de tomar la foto y ves lo que
+//      ya tienes publicado. No gasta nada.
+//   2. Aviso automatico: al terminar el analisis, /subir dispara el evento
+//      'hgshop:analizado' y este componente busca solo con el titulo y las
+//      palabras clave que acaba de generar Gemini. Si encuentra algo, muestra
+//      el aviso antes de que guardes.
+//
+// Es un componente cerrado: si se quita la etiqueta de subir.astro, el sitio
+// queda exactamente como estaba. No modifica el formulario ni el guardado;
+// el boton "Ya lo tengo" solo le da clic al #boton-cancelar que ya existe.
+// ---------------------------------------------------------------------------
+---
+
+<section id="aviso-duplicados" class="mt-6">
+  <div class="flex gap-2">
+    <input
+      id="dup-busqueda"
+      type="search"
+      enterkeyhint="search"
+      autocomplete="off"
+      placeholder="¿Ya lo tengo? Busca antes de subir"
+      class="flex-1 border border-neutral-200 rounded-md px-3 py-2 text-base sm:text-sm"
+    />
+    <button
+      id="dup-boton-buscar"
+      type="button"
+      class="shrink-0 border border-neutral-300 rounded-md px-4 text-sm font-medium text-neutral-700"
+    >
+      Buscar
+    </button>
+  </div>
+
+  <div id="dup-caja" class="hidden mt-3 rounded-xl border p-3">
+    <p id="dup-encabezado" class="text-sm font-medium"></p>
+    <div id="dup-lista" class="mt-2 space-y-2"></div>
+    <div id="dup-acciones" class="hidden mt-3 flex gap-2">
+      <button
+        id="dup-continuar"
+        type="button"
+        class="flex-1 border border-neutral-300 bg-white rounded-md py-2 text-sm font-medium text-neutral-700"
+      >
+        Es otro, continuar
+      </button>
+      <button
+        id="dup-cancelar"
+        type="button"
+        class="flex-1 bg-neutral-900 text-white rounded-md py-2 text-sm font-medium"
+      >
+        Ya lo tengo, cancelar
+      </button>
+    </div>
+  </div>
+</section>
+
+<script>
+  const CLAVE_PIN = 'hgshop-upload-pin';
+
+  const caja = document.getElementById('dup-caja') as HTMLElement;
+  const encabezado = document.getElementById('dup-encabezado') as HTMLElement;
+  const lista = document.getElementById('dup-lista') as HTMLElement;
+  const acciones = document.getElementById('dup-acciones') as HTMLElement;
+  const campoBusqueda = document.getElementById('dup-busqueda') as HTMLInputElement;
+  const botonBuscar = document.getElementById('dup-boton-buscar') as HTMLButtonElement;
+  const botonContinuar = document.getElementById('dup-continuar') as HTMLButtonElement;
+  const botonCancelar = document.getElementById('dup-cancelar') as HTMLButtonElement;
+
+  // Colores de la caja segun el caso (aviso ambar vs resultado neutro)
+  const AMBAR = ['border-amber-300', 'bg-amber-50'];
+  const NEUTRO = ['border-neutral-200', 'bg-neutral-50'];
+
+  function pintarCaja(estilo: string[]) {
+    caja.classList.remove(...AMBAR, ...NEUTRO);
+    caja.classList.add(...estilo);
+  }
+
+  function ocultar() {
+    caja.classList.add('hidden');
+    lista.innerHTML = '';
+    acciones.classList.add('hidden');
+  }
+
+  async function buscarParecidos(titulo: string, palabrasClave: string[]) {
+    const pin = localStorage.getItem(CLAVE_PIN) || '';
+    const respuesta = await fetch('/api/buscar-parecidos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-upload-pin': pin },
+      body: JSON.stringify({ titulo, palabrasClave }),
+    });
+    if (!respuesta.ok) throw new Error('No se pudo consultar el catálogo');
+    return await respuesta.json();
+  }
+
+  /** Pinta un resultado. Todo con textContent: nada de innerHTML con datos. */
+  function filaProducto(p: any): HTMLElement {
+    const fila = document.createElement('div');
+    fila.className = 'flex gap-3 items-center bg-white rounded-md border border-neutral-200 p-2';
+
+    if (p.imagenUrl) {
+      const img = document.createElement('img');
+      img.src = p.imagenUrl;
+      img.loading = 'lazy';
+      img.className = 'w-14 h-14 object-contain rounded bg-neutral-50 shrink-0';
+      fila.appendChild(img);
+    }
+
+    const texto = document.createElement('div');
+    texto.className = 'min-w-0 flex-1';
+
+    const titulo = document.createElement('p');
+    titulo.className = 'text-sm text-neutral-900 leading-snug';
+    titulo.textContent = p.titulo;
+    texto.appendChild(titulo);
+
+    const detalle = document.createElement('p');
+    detalle.className = 'text-xs text-neutral-500 mt-0.5';
+    const partes: string[] = [];
+    if (p.categoriaTitulo) partes.push(p.categoriaTitulo);
+    if (p.agotado) partes.push('AGOTADO');
+    else if (typeof p.cantidadDisponible === 'number') partes.push(`${p.cantidadDisponible} en existencia`);
+    if (p.codigoIgual) partes.push(`mismo código: ${p.codigoIgual.toUpperCase()}`);
+    detalle.textContent = partes.join(' · ');
+    texto.appendChild(detalle);
+
+    fila.appendChild(texto);
+
+    if (p.slug) {
+      const ver = document.createElement('a');
+      ver.href = `/productos/${p.slug}`;
+      ver.target = '_blank';
+      ver.rel = 'noopener';
+      ver.className = 'shrink-0 text-xs text-neutral-500 underline';
+      ver.textContent = 'ver';
+      fila.appendChild(ver);
+    }
+
+    return fila;
+  }
+
+  function mostrar(resultados: any[], automatico: boolean) {
+    lista.innerHTML = '';
+    for (const p of resultados) lista.appendChild(filaProducto(p));
+
+    if (automatico) {
+      pintarCaja(AMBAR);
+      encabezado.className = 'text-sm font-medium text-amber-900';
+      encabezado.textContent =
+        resultados.length === 1
+          ? 'Ojo: quizá ya tienes este producto'
+          : `Ojo: ${resultados.length} productos parecidos ya están publicados`;
+      acciones.classList.remove('hidden');
+    } else {
+      pintarCaja(NEUTRO);
+      encabezado.className = 'text-sm font-medium text-neutral-700';
+      encabezado.textContent = `${resultados.length} producto(s) parecido(s) en tu catálogo`;
+      acciones.classList.add('hidden');
+    }
+
+    caja.classList.remove('hidden');
+  }
+
+  function sinResultados(mensaje: string) {
+    lista.innerHTML = '';
+    acciones.classList.add('hidden');
+    pintarCaja(NEUTRO);
+    encabezado.className = 'text-sm font-medium text-neutral-700';
+    encabezado.textContent = mensaje;
+    caja.classList.remove('hidden');
+  }
+
+  // --- Buscador manual ---
+  async function buscarManual() {
+    const texto = campoBusqueda.value.trim();
+    if (texto.length < 2) return;
+    botonBuscar.disabled = true;
+    const original = botonBuscar.textContent;
+    botonBuscar.textContent = '...';
+    try {
+      const resultados = await buscarParecidos(texto, []);
+      if (resultados.length === 0) sinResultados('No encontré nada parecido en tu catálogo.');
+      else mostrar(resultados, false);
+    } catch (error: any) {
+      sinResultados(`No se pudo buscar: ${error.message}`);
+    } finally {
+      botonBuscar.disabled = false;
+      botonBuscar.textContent = original;
+    }
+  }
+
+  botonBuscar.addEventListener('click', buscarManual);
+  campoBusqueda.addEventListener('keydown', (evento: KeyboardEvent) => {
+    if (evento.key === 'Enter') {
+      evento.preventDefault();
+      campoBusqueda.blur(); // cierra el teclado en el celular
+      buscarManual();
+    }
+  });
+  campoBusqueda.addEventListener('search', () => {
+    if (campoBusqueda.value.trim() === '') ocultar();
+  });
+
+  // --- Aviso automatico tras el analisis ---
+  document.addEventListener('hgshop:analizado', async () => {
+    ocultar();
+    const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement | null;
+    const campoClaves = document.getElementById('campo-palabras-clave') as HTMLTextAreaElement | null;
+    const titulo = campoTitulo?.value.trim() || '';
+    if (!titulo) return;
+    const claves = (campoClaves?.value || '')
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    try {
+      const resultados = await buscarParecidos(titulo, claves);
+      if (resultados.length === 0) return; // nada parecido: no estorba
+      mostrar(resultados, true);
+      caja.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch {
+      // Si la consulta falla no se interrumpe la subida: el aviso es una ayuda,
+      // no un requisito. El hashFoto sigue protegiendo la foto identica.
+    }
+  });
+
+  botonContinuar.addEventListener('click', ocultar);
+
+  botonCancelar.addEventListener('click', () => {
+    ocultar();
+    // Reusa el boton que ya existe en /subir en vez de duplicar su logica
+    (document.getElementById('boton-cancelar') as HTMLButtonElement | null)?.click();
+    campoBusqueda.value = '';
+  });
+</script>

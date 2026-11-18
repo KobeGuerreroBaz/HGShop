@@ -1,0 +1,12 @@
+# Cabeceras de seguridad para las páginas estáticas (el middleware solo alcanza
+# a /pedido y /buscar, que son SSR). Mismas reglas que src/middleware.ts, con
+# dos diferencias: se agrega blob: a img-src (las vistas previas de /subir usan
+# URL.createObjectURL) y se quitan los dominios de Google Fonts, que ya no se
+# usan porque las fuentes se sirven desde /fonts.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://cdn.sanity.io data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains

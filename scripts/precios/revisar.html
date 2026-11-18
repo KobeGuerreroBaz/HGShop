@@ -26,6 +26,26 @@
   @media (max-width: 760px) { .tarjeta { grid-template-columns: 1fr; } }
   .cabecera { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
   .cabecera .botones button { padding: 7px 12px; }
+  .ultimos { margin: 6px 0 2px; font-size: 12px; color: var(--suave); display: flex; flex-direction: column; gap: 2px; }
+  .ultimos .u-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+  .ultimos b { color: var(--texto); }
+  .ultimos .u-sig { font-weight: 600; }
+  .fb-seccion { margin-top: 14px; }
+  .fb-seccion h3 { font-size: 14px; margin: 0 0 6px; }
+  .fb-fila { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--borde); flex-wrap: wrap; }
+  .fb-fila .fb-tit { flex: 1; min-width: 220px; font-size: 13px; }
+  .fb-fila .fb-dato { font-size: 12px; color: var(--suave); }
+  .fb-fila.primero { background: var(--azul-claro); border-radius: 8px; padding: 7px 8px; }
+  .pg-duda { display: flex; gap: 12px; border-top: 1px solid var(--borde); padding: 12px 0; }
+  .pg-duda img { width: 150px; height: 150px; object-fit: cover; border-radius: 8px; border: 1px solid var(--borde); cursor: zoom-in; }
+  .pg-duda .pg-frase { font-size: 15px; }
+  .pg-duda .pg-frase mark { background: var(--ambar-claro); color: var(--ambar); padding: 0 4px; border-radius: 4px; font-weight: 600; }
+  .pg-botones { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; align-items: flex-start; }
+  .pg-sug { background: var(--azul-claro); color: var(--azul); border-radius: 8px; padding: 6px 8px; font-size: 13px; margin-top: 6px; }
+  .pg-regla { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--borde); padding: 7px 0; font-size: 13px; }
+  .pg-regla .pg-txt { flex: 1; min-width: 200px; }
+  @media (max-width: 760px) { .pg-duda { flex-direction: column; } .pg-duda img { width: 100%; height: auto; max-height: 260px; object-fit: contain; } }
+  .etq-ultimo { background: var(--azul-claro); color: var(--azul); border-radius: 8px; padding: 0 6px; font-size: 11px; white-space: nowrap; }
   /* Ventanas: agregar álbum, historial */
   .ventana-fondo { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 15; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
   .ventana-fondo[hidden] { display: none; }
@@ -82,6 +102,8 @@
     .visor-sep, .visor-barra [data-v=menos], .visor-barra [data-v=mas], .visor-barra [data-v=ajustar] { display: none; }
     .visor-barra button, .visor-barra a { padding: 8px 14px; min-width: 44px; }
   }
+  /* Tu carrito se queda a la vista (debajo del encabezado) mientras bajas por sus coincidencias. En celular no: va arriba. */
+  @media (min-width: 761px) { .tarjeta > .mio { position: sticky; top: calc(var(--alto-encabezado, 0px) + 12px); align-self: start; } }
   .mio img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fafaf9; border-radius: 10px; border: 1px solid var(--borde); cursor: zoom-in; }
   .mio .titulo { font-weight: 600; margin-top: 8px; }
   .mio .meta { color: var(--suave); font-size: 12px; margin-top: 2px; }
@@ -211,7 +233,22 @@
   .rv-edit .rv-edit-botones { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
   .rv-edit .rv-edit-nota { margin-right: auto; font-size: 11px; color: var(--suave); }
   button.enlace { border: 0; background: none; color: var(--azul); padding: 0; font-size: inherit; text-decoration: underline; }
+  /* Ventana 👁️ Vision: recorte nuevo | recorte de referencia (se recortan en el navegador desde la foto completa) */
+  .vs-seccion { margin: 14px 0 4px; font-weight: 600; }
+  .vs-seccion small { font-weight: 400; color: var(--suave); }
+  .vs-par { display: flex; gap: 6px; flex: none; }
+  .vs-par { cursor: zoom-in; }
+  .vs-recorte { width: 175px; height: 255px; border-radius: 8px; border: 1px solid var(--borde); background-color: #fafaf9; background-repeat: no-repeat; position: relative; }
+  .vs-recorte span { position: absolute; left: 4px; bottom: 4px; font-size: 10px; background: rgba(0,0,0,.6); color: #fff; padding: 1px 5px; border-radius: 6px; }
+  .vs-ref { color: var(--suave); font-size: 12px; margin-top: 2px; }
+  #vs-lista details > summary { cursor: pointer; margin: 14px 0 4px; font-weight: 600; }
+  /* Recortes en grande (clic en cualquier recorte; otro clic o Esc cierra) */
+  #vs-zoom { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 1000; display: flex; gap: 16px; align-items: center; justify-content: center; padding: 20px; cursor: zoom-out; }
+  #vs-zoom[hidden] { display: none; }
+  #vs-zoom .vs-recorte { width: min(44vw, 560px); height: min(88vh, 820px); background-color: #fff; }
+  #vs-zoom .vs-recorte span { font-size: 14px; padding: 3px 8px; }
   @media (max-width: 760px) {
+    .vs-recorte { width: 46vw; height: 62vw; }
     .rv-fila { flex-direction: column; }
     .rv-fila img, .rv-fila .sinfoto { width: 100%; height: auto; max-height: 260px; object-fit: contain; }
     .rv-edit { grid-template-columns: 1fr 1fr; }
@@ -257,12 +294,15 @@
     <div class="botones">
       <button id="btn-traer" type="button" title="Vuelve a leer tus productos de Sanity (lo que acabas de subir) sin apagar la página">🔄 Traer productos nuevos</button>
       <button id="btn-revisar" type="button" title="Filas que el scraper dejó dudosas, de todos los álbumes">🔍 Por revisar <span id="rv-n"></span></button>
+      <button id="btn-vision" type="button" title="Carritos que el filtro de Vision reconoció sin Gemini: revisa los dudosos y corrige los que no sean el mismo">👁️ Vision <span id="vs-n"></span></button>
+      <button id="btn-preguntas" type="button" hidden title="Frases junto a un precio que el scraper no conoce: tú dices qué significan y se guarda como regla">❓ Preguntas <span id="pg-n"></span></button>
       <button id="btn-agregar" type="button">➕ Agregar álbum</button>
       <button id="btn-albumes" type="button">📚 Álbumes</button>
       <button id="btn-apagar" type="button" hidden title="Cierra la página en la Mac">⏻ Apagar</button>
     </div>
   </div>
   <div class="resumen" id="resumen">Cargando…</div>
+  <div class="ultimos" id="ultimos" hidden></div>
   <div class="barra" id="filtros"></div>
   <div class="barra">
     <input type="search" id="texto" placeholder="Buscar en mis productos…" style="flex:1;min-width:180px">
@@ -340,11 +380,51 @@
   </div>
 </div>
 
+<div class="ventana-fondo" id="v-vision" hidden>
+  <div class="ventana ancha">
+    <h2>👁️ Reconocidos por Vision (sin Gemini)</h2>
+    <div class="ayuda">Izquierda: el carrito de esta foto. Derecha: el de la foto anterior de donde se tomó el nombre. Si no es el mismo, <b>✗ No es el mismo</b> y corrige: el filtro ya no vuelve a usar esa referencia y aprende tu nombre.</div>
+    <div class="rv-filtros">
+      <select id="vs-album"></select>
+      <select id="vs-ver"><option value="pendientes">Sin revisar</option><option value="todas">Todas</option><option value="decididas">Ya decididas</option></select>
+    </div>
+    <div id="vs-lista"></div>
+    <div class="fila"><button type="button" class="primario" id="vs-cerrar">Cerrar y aplicar</button></div>
+  </div>
+</div>
+
+<div id="vs-zoom" hidden></div>
+
 <div class="ventana-fondo" id="v-albumes" hidden>
   <div class="ventana">
     <h2>📚 Álbumes procesados</h2>
     <div id="lista-albumes">Cargando…</div>
     <div class="fila"><button type="button" data-cerrar>Cerrar</button></div>
+  </div>
+</div>
+
+<div class="ventana-fondo" id="v-preguntas" hidden>
+  <div class="ventana" style="width:min(720px,100%)">
+    <h2>❓ Preguntas del scraper</h2>
+    <div class="ayuda">Frases junto a un precio que el scraper no conoce. Tu respuesta se guarda como regla de ese vendedor y el álbum se corrige con lo ya leído (sin volver a pagar). Con otros vendedores solo se sugiere.</div>
+    <div id="pg-dudas"></div>
+    <h2 style="margin-top:18px">📒 Reglas guardadas</h2>
+    <div id="pg-reglas"></div>
+    <div class="error" id="pg-error"></div>
+    <div class="fila"><button type="button" data-cerrar>Cerrar</button></div>
+  </div>
+</div>
+
+<div class="ventana-fondo" id="v-facebook" hidden>
+  <div class="ventana">
+    <h2>📋 Álbumes pendientes en Facebook · <span id="fb-vendedor"></span></h2>
+    <div class="ayuda" id="fb-info"></div>
+    <div id="fb-contenido">Cargando…</div>
+    <div class="error" id="fb-error"></div>
+    <div class="fila">
+      <button type="button" id="fb-actualizar" title="Vuelve a revisar su página de Álbumes en Facebook (busca álbumes nuevos). Usa la misma sesión que los álbumes: no se puede mientras se procesa uno">🔄 Actualizar lista</button>
+      <button type="button" data-cerrar>Cerrar</button>
+    </div>
   </div>
 </div>
 
@@ -538,8 +618,14 @@ function htmlCandidato(c, desdeBusqueda = false) {
     </div>
     ${(() => {
       // Nivel 4 (otra serie u otro número, leídos): plegadas al final, a un clic. Nunca se ocultan solas.
-      const vis = c.avistamientos.filter((a) => a.nivel !== 4);
-      const pleg = c.avistamientos.filter((a) => a.nivel === 4);
+      // Si TODAS son de nivel 4 se muestran abiertas (con sus etiquetas): nunca hay que dar clic para ver una coincidencia
+      // Orden: primero las que confirmaste ("es este"), luego las que no has decidido y al final "otra versión";
+      // dentro de cada grupo, de mayor a menor precio. Las confirmadas nunca se quedan plegadas.
+      const grupo = (a) => (a.fotoConfirmada ? 0 : a.otraVersion ? 2 : 1);
+      const ordenar = (lista) => lista.slice().sort((x, y) => grupo(x) - grupo(y) || (y.precio ?? 0) - (x.precio ?? 0));
+      const todas4 = c.avistamientos.length > 0 && c.avistamientos.every((a) => a.nivel === 4);
+      const vis = ordenar(todas4 ? c.avistamientos : c.avistamientos.filter((a) => a.nivel !== 4 || a.fotoConfirmada));
+      const pleg = ordenar(todas4 ? [] : c.avistamientos.filter((a) => a.nivel === 4 && !a.fotoConfirmada));
       return (vis.length ? `<div class="avist">${vis.map((a) => htmlAvistamiento(a, c)).join('')}</div>` : '')
         + (pleg.length ? `<details class="plegadas"><summary>${pleg.length} ${pleg.length === 1 ? 'foto' : 'fotos'} con otra serie u otro número ▸</summary><div class="avist">${pleg.map((a) => htmlAvistamiento(a, c)).join('')}</div></details>` : '');
     })()}
@@ -1110,24 +1196,175 @@ const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct
 const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 let historial = { grupos: [], vendedores: [] };
 
+// Alto del encabezado fijo (cambia con la cinta de álbumes y los filtros): lo usa la foto de tu carrito para quedarse debajo
+const encabezado = document.querySelector('header');
+const medirEncabezado = () => document.documentElement.style.setProperty('--alto-encabezado', `${encabezado.offsetHeight}px`);
+new ResizeObserver(medirEncabezado).observe(encabezado);
+medirEncabezado();
+
 function abrirVentana(id) { $(id).hidden = false; }
 function cerrarVentanas() {
   const habiaRevisar = !$('#v-revisar').hidden;
+  const habiaVision = !$('#v-vision').hidden;
   document.querySelectorAll('.ventana-fondo').forEach((v) => (v.hidden = true));
   if (habiaRevisar) cerrarRevision(); // aplica a la base las decisiones tomadas
+  if (habiaVision) cerrarVision();
 }
 document.querySelectorAll('.ventana-fondo').forEach((v) =>
   v.addEventListener('click', (e) => { if (e.target === v || e.target.closest('[data-cerrar]')) cerrarVentanas(); })
 );
 
+// ---------- Último álbum procesado de cada vendedor (cinta de arriba) ----------
+function haceTiempo(iso) {
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (min < 1) return 'hace un momento';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'ayer' : `hace ${d} días`;
+}
+// ---------- ❓ Preguntas del scraper y reglas de precios (los datos viven en reglas.mjs del scraper) ----------
+let datosPg = { dudas: [], reglas: [], significados: {} };
+async function cargarPreguntas() {
+  try { datosPg = await api('/api/reglas'); } catch { return; }
+  const n = datosPg.dudas.length;
+  $('#btn-preguntas').hidden = !n && !datosPg.reglas.length;
+  $('#pg-n').textContent = n ? `(${n})` : '';
+  if (!$('#v-preguntas').hidden) pintarPreguntas();
+}
+function pintarPreguntas() {
+  const S = datosPg.significados;
+  $('#pg-dudas').innerHTML = datosPg.dudas.length ? datosPg.dudas.map((d, i) => {
+    const e = d.ejemplos[0] || {};
+    const sug = d.sugerencias.map((r) => `<div class="pg-sug">Con <b>${r.nombres.map(esc).join(', ')}</b> dijiste: ${esc(S[r.significado] || r.significado)} <button type="button" data-pg="${i}" data-sig="${esc(r.significado)}">Usar la misma</button></div>`).join('');
+    return `<div class="pg-duda">${e.archivo ? `<a href="/fotoalbum/${encodeURIComponent(e.archivo)}" target="_blank" rel="noopener"><img src="/fotoalbum/${encodeURIComponent(e.archivo)}" loading="lazy" alt=""></a>` : ''}<div>
+      <div class="pg-frase"><b>${esc(d.nombre)}</b> · ${dinero(e.precio)} <mark>${esc(d.frase)}</mark></div>
+      <div class="ayuda">¿Qué significa «${esc(d.frase)}» junto al precio?${e.pie ? ` Así leí los letreros: ${esc(e.pie.replace(/\n/g, ' / '))}` : ''}${d.ejemplos.length > 1 ? ` · salió en ${d.ejemplos.length} fotos` : ''}${e.url ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener">Facebook ↗</a>` : ''}</div>
+      ${sug}
+      <div class="pg-botones">${Object.entries(S).map(([k, t]) => `<button type="button" data-pg="${i}" data-sig="${k}">${esc(t)}</button>`).join('')}</div>
+    </div></div>`;
+  }).join('') : '<div class="vacio">No hay preguntas pendientes.</div>';
+  $('#pg-reglas').innerHTML = datosPg.reglas.length ? datosPg.reglas.map((r, i) =>
+    `<div class="pg-regla"><span class="pg-txt"><b>«${esc(r.frase)}»</b> = ${esc(S[r.significado] || r.significado)}<br><span class="ayuda">Activa con: ${r.nombres.map(esc).join(', ')}${r.usos ? ` · usada ${r.usos} ${r.usos === 1 ? 'vez' : 'veces'}` : ''}</span></span>` +
+    `${r.vendedores.includes('*') ? '' : `<button type="button" data-regla="${i}" data-hacer="todos">Activar para todos</button>`}<button type="button" data-regla="${i}" data-hacer="borrar">Borrar</button></div>`).join('')
+    : '<div class="vacio">Todavía no hay reglas. De fábrica solo se sabe que «c/u» aplica a todos los carritos de la foto.</div>';
+}
+async function mandarRegla(ruta, cuerpo) {
+  $('#pg-error').textContent = '';
+  try {
+    const r = await api(ruta, cuerpo);
+    if (r.corrigiendo) { cerrarVentanas(); iniciarAvance(); aviso(`Regla guardada: corrigiendo ${r.corrigiendo} ${r.corrigiendo === 1 ? 'álbum' : 'álbumes'} (sin costo)`); }
+    else aviso('Regla guardada');
+    await cargarPreguntas();
+  } catch (err) { $('#pg-error').textContent = err.message; }
+}
+$('#btn-preguntas').addEventListener('click', async () => { abrirVentana('#v-preguntas'); pintarPreguntas(); await cargarPreguntas(); });
+$('#v-preguntas').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pg]');
+  if (b) { const d = datosPg.dudas[Number(b.dataset.pg)]; if (d) mandarRegla('/api/reglas/responder', { frase: d.frase, significado: b.dataset.sig, vendedor: d.vendedor }); return; }
+  const r = e.target.closest('[data-regla]');
+  if (!r) return;
+  const regla = datosPg.reglas[Number(r.dataset.regla)];
+  if (!regla) return;
+  if (r.dataset.hacer === 'todos') { if (confirm(`¿Aplicar «${regla.frase}» = ${datosPg.significados[regla.significado]} con TODOS los vendedores?`)) mandarRegla('/api/reglas/activar', { frase: regla.frase, significado: regla.significado, vendedor: '*' }); }
+  else if (confirm(`¿Borrar la regla «${regla.frase}»? Lo ya guardado no cambia; la frase se volverá a preguntar.`)) mandarRegla('/api/reglas/borrar', { frase: regla.frase, significado: regla.significado });
+});
+
+// Álbumes pendientes en Facebook de cada vendedor (los arma listar_albumes.mjs del scraper)
+let pendientesFb = [], ultimosActual = [], vendedorFb = '';
+const listaDe = (vendedor) => pendientesFb.find((l) => l.vendedor === vendedor && !l.sinLista);
+/** "ALBUM DE VENTAS SEMANA "31" 3RA PARTE (PREMIUM)" → "semana 31 · 3ª parte (premium)" */
+function tituloCorto(a) {
+  const t = String(a.titulo || '');
+  const sem = (t.match(/SEM\w*\s*["“]?\s*(\d{1,2})/i) || [])[1];
+  const parte = (t.match(/(\d)\s*(?:RA|DA|TA|VA|MA|NA|A)?\s*["“]?\s*PARTE/i) || [])[1];
+  const tipo = (t.match(/PREMIUM|MATCHBOX|HOT ?WHEELS/i) || [])[0];
+  if (!sem) return t.slice(0, 45);
+  return `semana ${sem}${parte ? ` · ${parte}ª parte` : ''}${tipo ? ` (${tipo.toLowerCase()})` : ''}`;
+}
+const datoAlbum = (a) => [a.fecha ? fecha(a.fecha) : 'sin fecha', a.fotos != null ? `${a.fotos} fotos` : ''].filter(Boolean).join(' · ');
+function pintarUltimos(lista) {
+  ultimosActual = lista || [];
+  const cont = $('#ultimos');
+  if (!ultimosActual.length) { cont.hidden = true; return; }
+  cont.hidden = false;
+  cont.innerHTML = `<div>🕓 Último álbum procesado · ${ultimosActual.length} ${ultimosActual.length === 1 ? 'vendedor' : 'vendedores'}</div>` +
+    ultimosActual.map((u) => {
+      const l = listaDe(u.vendedor);
+      const sig = l?.haciaAtras[0];
+      const n = l ? l.totalAtras + l.huecos.length + l.nuevos.length : 0;
+      const boton = sig && sig.link
+        ? `<button type="button" class="enlace u-sig" data-sig="${esc(u.vendedor)}" title="${esc(sig.titulo)}">➕ Siguiente: ${esc(tituloCorto(sig))} · ${datoAlbum(sig)}</button>`
+        : `<button type="button" class="enlace" data-siguiente="${esc(u.vendedor)}">➕ Siguiente</button>`;
+      return `<div class="u-fila"><span><b>${esc(u.vendedor)}</b> · ${fecha(u.fecha)}${u.numero > 1 ? ` (n.º ${u.numero})` : ''} · <code>${esc(u.nombre)}</code> · ${haceTiempo(u.procesadoEn)}</span>${u.url ? `<a href="${esc(u.url)}" target="_blank" rel="noopener">Facebook ↗</a>` : ''}${boton}${l ? `<button type="button" class="enlace" data-pendientes="${esc(u.vendedor)}">📋 Pendientes (${n})</button>` : ''}</div>`;
+    }).join('');
+}
+async function cargarUltimos() {
+  try { pintarUltimos((await api('/api/albumes')).ultimos); } catch {}
+}
+async function cargarPendientes() {
+  try { pendientesFb = (await api('/api/facebook/pendientes')).listas || []; } catch { return; }
+  pintarUltimos(ultimosActual);
+  if (!$('#v-facebook').hidden) pintarPendientes();
+}
+$('#ultimos').addEventListener('click', (e) => {
+  const sig = e.target.closest('[data-sig]');
+  if (sig) { const a = listaDe(sig.dataset.sig)?.haciaAtras[0]; if (a) abrirAgregar(sig.dataset.sig, a); return; }
+  const pend = e.target.closest('[data-pendientes]');
+  if (pend) { abrirPendientes(pend.dataset.pendientes); return; }
+  const b = e.target.closest('[data-siguiente]');
+  if (b) abrirAgregar(b.dataset.siguiente);
+});
+
+// Ventana "📋 Pendientes": hacia atrás (lo que sigue), huecos y nuevos
+function abrirPendientes(vendedor) {
+  vendedorFb = vendedor;
+  $('#fb-error').textContent = '';
+  pintarPendientes();
+  abrirVentana('#v-facebook');
+  cargarPendientes();
+}
+function pintarPendientes() {
+  const l = listaDe(vendedorFb);
+  $('#fb-vendedor').textContent = vendedorFb;
+  if (!l) { $('#fb-contenido').textContent = 'Este vendedor todavía no tiene lista. Dale 🔄 Actualizar lista.'; $('#fb-info').textContent = ''; return; }
+  $('#fb-info').textContent = `Lista revisada ${l.actualizado ? haceTiempo(l.actualizado) : '—'}${l.parcial ? ' (incompleta: se detuvo a la mitad)' : ''} · ${l.procesados} ya procesados · ${l.ignorados} ignorados (accesorios, figuras, piezas sueltas). Lo procesado se marca solo al terminar cada álbum.`;
+  const fila = (a, primero) => `<div class="fb-fila${primero ? ' primero' : ''}"><div class="fb-tit">${esc(a.titulo)}<div class="fb-dato">${datoAlbum(a)}</div></div>` +
+    `${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">Facebook ↗</a><button type="button" data-procesar="${esc(a.id)}"${primero ? ' class="primario"' : ''}>Procesar</button>` : '<span class="fb-dato">sin link (actualiza la lista)</span>'}</div>`;
+  const atras = l.haciaAtras.map((a, i) => fila(a, i === 0)).join('') + (l.totalAtras > l.haciaAtras.length ? `<div class="fb-dato" style="padding-top:6px">…y ${l.totalAtras - l.haciaAtras.length} más</div>` : '');
+  $('#fb-contenido').innerHTML =
+    `<div class="fb-seccion"><h3>⬇️ Hacia atrás · ${l.totalAtras}</h3>${atras || '<div class="fb-dato">No hay pendientes hacia atrás.</div>'}</div>` +
+    (l.huecos.length ? `<div class="fb-seccion"><h3>🕳️ Huecos (te los saltaste) · ${l.huecos.length}</h3>${l.huecos.map((a) => fila(a)).join('')}</div>` : '') +
+    (l.nuevos.length ? `<details class="fb-seccion"><summary><b>🆕 Nuevos · ${l.nuevos.length}</b></summary>${l.nuevos.map((a) => fila(a)).join('')}</details>` : '');
+}
+$('#fb-contenido').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-procesar]');
+  if (!b) return;
+  const l = listaDe(vendedorFb);
+  const a = l && [...l.haciaAtras, ...l.huecos, ...l.nuevos].find((x) => x.id === b.dataset.procesar);
+  if (!a) return;
+  cerrarVentanas();
+  abrirAgregar(vendedorFb, a);
+});
+$('#fb-actualizar').addEventListener('click', async () => {
+  $('#fb-error').textContent = '';
+  try {
+    await api('/api/facebook/actualizar', { vendedor: vendedorFb });
+    cerrarVentanas();
+    iniciarAvance();
+  } catch (err) { $('#fb-error').textContent = err.message; }
+});
+
 async function cargarHistorial() {
   historial = await api('/api/albumes');
+  pintarUltimos(historial.ultimos);
   $('#a-vendedor').innerHTML =
     historial.vendedores.map((v) => `<option>${esc(v)}</option>`).join('') + '<option value="__nuevo">➕ Nuevo vendedor…</option>';
   $('#lista-albumes').innerHTML = historial.grupos.length
     ? historial.grupos.map((g) => `<div class="grupo-vendedor">
         <h3>${esc(g.vendedor)} <button type="button" data-agregar="${esc(g.vendedor)}">➕ Álbum</button></h3>
-        ${g.albumes.length ? g.albumes.map((a) => `<div class="album-bloque"><div class="album-fila"><span>${fecha(a.fecha) || esc(a.nombre)} · <code>${esc(a.nombre)}</code></span><span>${a.filas} precios${a.revisar ? ` · <button type="button" class="enlace" data-revisar="${esc(a.nombre)}">${a.revisar} por revisar</button>` : ''}</span></div><div class="album-detalle">${a.fotos} fotos leídas · ${a.omitidos} omitidos${a.url ? ` · <a href="${esc(a.url)}" target="_blank" rel="noopener">Abrir en Facebook ↗</a>` : ''}</div></div>`).join('') : '<div class="album-fila">Sin álbumes todavía</div>'}
+        ${g.albumes.length ? g.albumes.map((a) => `<div class="album-bloque"><div class="album-fila"><span>${fecha(a.fecha) || esc(a.nombre)} · <code>${esc(a.nombre)}</code>${a.ultimo ? ' <span class="etq-ultimo">🕓 último</span>' : ''}</span><span>${a.filas} precios${a.revisar ? ` · <button type="button" class="enlace" data-revisar="${esc(a.nombre)}">${a.revisar} por revisar</button>` : ''}</span></div><div class="album-detalle">${a.fotos} fotos leídas · ${a.omitidos} omitidos${a.url ? ` · <a href="${esc(a.url)}" target="_blank" rel="noopener">Abrir en Facebook ↗</a>` : ''}</div></div>`).join('') : '<div class="album-fila">Sin álbumes todavía</div>'}
       </div>`).join('')
     : '<div class="vacio">Todavía no hay álbumes.</div>';
 }
@@ -1145,8 +1382,8 @@ function actualizarNombreAlbum() {
   }
   if (!vendedor || !f) { $('#a-nombre').textContent = ''; return; }
   if ($('#a-prueba').checked) { $('#a-nombre').textContent = 'Es una prueba de 3 fotos: no se guarda nada.'; return; }
-  const [, m, d] = f.split('-').map(Number);
-  const base = `${slug(vendedor)}-${MESES_CORTOS[m - 1]}${d}`;
+  const [anio, m, d] = f.split('-').map(Number);
+  const base = `${slug(vendedor)}-${anio}-${MESES_CORTOS[m - 1]}${d}`; // con año, igual que revisar.mjs
   // Si ese vendedor ya tiene un álbum con ese nombre (y el link es otro), este se guarda con número: …-2, …-3
   const usados = new Set(historial.grupos.flatMap((g) => g.albumes.map((a) => a.nombre)));
   let nombre = base;
@@ -1180,16 +1417,20 @@ $('#a-url').addEventListener('input', () => {
 });
 $('#a-prueba').addEventListener('change', pintarAvisoLink);
 
-async function abrirAgregar(vendedor) {
+async function abrirAgregar(vendedor, album) {
   $('#a-error').textContent = '';
-  if (!$('#a-fecha').value) $('#a-fecha').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  // album = uno de la lista de Facebook: se llenan link y fecha
+  if (album) { $('#a-url').value = album.link || ''; $('#a-fecha').value = album.fecha || ''; }
+  else if (!$('#a-fecha').value) $('#a-fecha').value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   abrirVentana('#v-agregar');
   try { await cargarHistorial(); } catch (e) { $('#a-error').textContent = e.message; }
   if (vendedor) $('#a-vendedor').value = vendedor;
   $('#a-prueba').checked = false;
   actualizarNombreAlbum();
   $('#a-url').dispatchEvent(new Event('input')); // si quedó un link escrito, vuelve a revisar si ya está procesado
-  $('#a-url').focus();
+  if (album && !album.fecha) { $('#a-error').textContent = 'Este álbum no tiene fecha en la lista: escríbela (la ves en Facebook ↗).'; $('#a-fecha').focus(); }
+  else if (album) $('#f-agregar [type=submit]').focus();
+  else $('#a-url').focus();
 }
 $('#btn-agregar').addEventListener('click', () => abrirAgregar());
 $('#btn-albumes').addEventListener('click', async () => {
@@ -1402,6 +1643,147 @@ async function cerrarRevision() {
   }
 }
 $('#btn-revisar').addEventListener('click', () => abrirRevisar());
+
+// ---------- 👁️ Vision: lo que el filtro reconoció sin Gemini ----------
+const vs = { filas: [], cambios: false, album: '', ver: 'pendientes', cargado: false, abierta: null, segurosAbiertos: false };
+const PUNTAJE_SEGURO = 120; // de aquí para arriba casi nunca se equivoca: va plegado al final
+function pintarContadorVs() { $('#vs-n').textContent = vs.cargado && vs.filas.length ? `(${vs.filas.filter((f) => (f.dudoso || f.revisar) && !f.decision).length})` : ''; }
+async function cargarVision() {
+  const d = await api('/api/vision');
+  vs.filas = d.filas;
+  vs.cargado = true;
+  pintarContadorVs();
+}
+async function abrirVision() {
+  abrirVentana('#v-vision');
+  $('#vs-lista').innerHTML = '<div class="vacio">Cargando…</div>';
+  try { await cargarVision(); } catch (e) { $('#vs-lista').textContent = e.message; return; }
+  pintarVision();
+}
+// Recorte con CSS: la foto completa de fondo, agrandada y movida al cuadro de la cuadrícula
+function recorte(archivo, cuadricula, n, etiqueta) {
+  if (!archivo) return `<div class="vs-recorte"><span>sin foto</span></div>`;
+  const [cols, filas] = String(cuadricula || '1x1').split('x').map(Number);
+  const f = Math.floor((n - 1) / cols), c = (n - 1) % cols;
+  const x = cols > 1 ? (c / (cols - 1)) * 100 : 0, y = filas > 1 ? (f / (filas - 1)) * 100 : 0;
+  return `<div class="vs-recorte" style="background-image:url('/fotoalbum/${encodeURIComponent(archivo)}');background-size:${cols * 100}% ${filas * 100}%;background-position:${x}% ${y}%"><span>${esc(etiqueta)}</span></div>`;
+}
+const vistaVs = (f) => (f.decision?.accion === 'corregida' ? { ...f, ...f.decision.cambios } : f);
+function tarjetaVs(f) {
+  const v = vistaVs(f);
+  const dec = f.decision?.accion;
+  const chips = [
+    f.dudoso ? '<span class="chip ambar">🤔 Dudoso</span>' : '',
+    /Precio raro/.test(f.notas) ? '<span class="chip rojo">💲 Precio raro</span>' : '',
+    `<span class="chip ${f.puntaje >= PUNTAJE_SEGURO ? 'verde' : 'gris'}">puntaje ${f.puntaje}</span>`,
+    dec === 'corregida' ? '<span class="chip azul">✎ Corregido</span>' : dec === 'revisada' ? '<span class="chip verde">✓ Bien</span>' : dec === 'descartada' ? '<span class="chip gris">🗑 Tarjeta vieja</span>' : '',
+  ].join('');
+  const nota = (f.notas || '').split('|').map((x) => x.trim()).filter((x) => /Dudoso|Precio raro/.test(x)).join(' · ');
+  const abierta = vs.abierta === f.clave;
+  return `<div class="rv-fila${dec ? ' hecha' : ''}" data-clave="${esc(f.clave)}">
+    <div class="vs-par">${recorte(f.archivoFoto, f.cuadricula, f.pos, 'esta foto')}${recorte(f.refArchivo, f.refCuadricula, f.refN, 'referencia')}</div>
+    <div class="rv-datos">
+      <div><span class="rv-modelo">${esc(v.modelo)}</span><span class="rv-precio">${v.precio != null ? '$' + v.precio : 'sin precio'}</span></div>
+      <div class="rv-meta">${esc(v.marca || '')}${v.serie ? ' · ' + esc(v.serie) : ''} · ${esc(f.album)} foto ${f.foto}, carrito ${f.pos}</div>
+      <div class="vs-ref">Referencia: ${esc(f.refModelo || '?')}${f.refPrecio != null ? ' ($' + f.refPrecio + ')' : ''} · ${esc(f.refClave)} carrito ${f.refN}</div>
+      <div>${chips}</div>
+      ${nota ? `<div class="rv-motivo">${esc(nota)}</div>` : ''}
+      <div class="rv-botones">
+        ${dec ? '<button type="button" data-vs="deshacer">↩ Deshacer</button>' : `<button type="button" data-vs="ok">✓ Es el mismo</button><button type="button" data-vs="editar">✗ No es el mismo</button><button type="button" data-vs="tarjeta" title="Tarjeta vieja genérica (Treasure Inside, Race & Win…): esa tarjeta ya no se procesa nunca">🗑 Tarjeta vieja</button>`}
+        ${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">Ver en Facebook ↗</a>` : ''}
+      </div>
+      <div class="rv-edit" ${abierta ? '' : 'hidden'}>
+        <div><label>Modelo</label><input data-c="modelo" value="${esc(v.modelo)}"></div>
+        <div><label>Serie</label><input data-c="serie" value="${esc(v.serie || '')}"></div>
+        <div><label>Marca</label><input data-c="marca" value="${esc(v.marca || 'Hot Wheels')}"></div>
+        <div><label>Número</label><input data-c="numero" value="${esc(v.numero || '')}"></div>
+        <div class="rv-edit-botones"><span class="rv-edit-nota">El precio se queda como lo puso el vendedor ($${v.precio ?? '?'})</span><button type="button" data-vs="cancelar">Cancelar</button><button type="button" class="primario" data-vs="guardar">Guardar</button></div>
+      </div>
+    </div>
+  </div>`;
+}
+function pintarVision() {
+  // Que la lista no se pliegue ni te regrese arriba cada vez que decides uno
+  const fondo = $('#v-vision'), ventana = fondo.querySelector('.ventana');
+  const scroll = [fondo.scrollTop, ventana.scrollTop];
+  pintarVisionLista();
+  fondo.scrollTop = scroll[0];
+  ventana.scrollTop = scroll[1];
+  const det = $('#vs-lista details');
+  if (det) det.addEventListener('toggle', () => (vs.segurosAbiertos = det.open));
+}
+function pintarVisionLista() {
+  const albums = [...new Set(vs.filas.map((f) => f.album))].sort().reverse();
+  $('#vs-album').innerHTML = `<option value="">Todos los álbumes (${vs.filas.length})</option>` + albums.map((a) => `<option value="${esc(a)}"${a === vs.album ? ' selected' : ''}>${esc(a)} (${vs.filas.filter((f) => f.album === a).length})</option>`).join('');
+  let filas = vs.filas.filter((f) => !vs.album || f.album === vs.album);
+  if (vs.ver === 'pendientes') filas = filas.filter((f) => !f.decision);
+  if (vs.ver === 'decididas') filas = filas.filter((f) => f.decision);
+  if (!filas.length) { $('#vs-lista').innerHTML = '<div class="vacio">Nada por aquí.</div>'; return; }
+  const alerta = filas.filter((f) => f.dudoso || /Precio raro/.test(f.notas));
+  const resto = filas.filter((f) => !alerta.includes(f)).sort((a, b) => a.puntaje - b.puntaje);
+  const bajos = resto.filter((f) => f.puntaje < PUNTAJE_SEGURO), seguros = resto.filter((f) => f.puntaje >= PUNTAJE_SEGURO);
+  $('#vs-lista').innerHTML =
+    (alerta.length ? `<div class="vs-seccion">Para revisar (${alerta.length}) <small>dudosos y precios raros</small></div>${alerta.map(tarjetaVs).join('')}` : '') +
+    (bajos.length ? `<div class="vs-seccion">Reconocidos con puntaje menor a ${PUNTAJE_SEGURO} (${bajos.length}) <small>aquí caen casi todos los errores; los de más arriba son los más dudosos</small></div>${bajos.map(tarjetaVs).join('')}` : '') +
+    (seguros.length ? `<details${vs.segurosAbiertos ? ' open' : ''}><summary>Reconocidos seguros, puntaje ${PUNTAJE_SEGURO} o más (${seguros.length})</summary>${seguros.map(tarjetaVs).join('')}</details>` : '');
+}
+async function decidirVs(f, accion, cambios) {
+  try {
+    await api('/api/vision/decidir', { clave: f.clave, accion, cambios });
+    vs.cambios = true;
+    vs.abierta = null;
+    f.decision = accion === 'deshacer' ? null : { accion: accion === 'ok' ? 'revisada' : accion === 'tarjeta_vieja' ? 'descartada' : 'corregida', cambios: accion === 'corregida' ? { ...cambios, precio: f.precio } : null };
+    pintarContadorVs();
+    pintarVision();
+    if (accion === 'corregida') aviso('Corregido: ese nombre ya lo aprende el filtro');
+    if (accion === 'tarjeta_vieja') aviso('Tarjeta agregada a las descartadas');
+  } catch (e) { aviso(e.message, true); }
+}
+async function cerrarVision() {
+  if (!vs.cambios) return;
+  aviso('Aplicando tus decisiones a la base…');
+  try { await api('/api/revision/aplicar', {}); vs.cambios = false; location.reload(); } catch (e) { aviso(e.message, true); }
+}
+$('#btn-vision').addEventListener('click', abrirVision);
+// Clic en los recortes: verlos en grande lado a lado
+function abrirZoomVs(f) {
+  $('#vs-zoom').innerHTML = recorte(f.archivoFoto, f.cuadricula, f.pos, 'esta foto') + recorte(f.refArchivo, f.refCuadricula, f.refN, 'referencia');
+  $('#vs-zoom').hidden = false;
+}
+$('#vs-zoom').addEventListener('click', () => ($('#vs-zoom').hidden = true));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#vs-zoom').hidden) { e.stopPropagation(); $('#vs-zoom').hidden = true; } }, true);
+// Aviso antes de salir de la página (gesto de "atrás" del trackpad, recargar, cerrar) si hay algo sin guardar o sin aplicar
+window.addEventListener('beforeunload', (e) => {
+  if ($('#v-vision').hidden) return;
+  const editando = vs.abierta && document.querySelector('#vs-lista .rv-edit:not([hidden])');
+  if (editando || vs.cambios) { e.preventDefault(); e.returnValue = ''; }
+});
+$('#vs-album').addEventListener('change', (e) => { vs.album = e.target.value; pintarVision(); });
+$('#vs-ver').addEventListener('change', (e) => { vs.ver = e.target.value; pintarVision(); });
+$('#vs-cerrar').addEventListener('click', cerrarVentanas);
+$('#vs-lista').addEventListener('click', (e) => {
+  const par = e.target.closest('.vs-par');
+  if (par) {
+    const f = vs.filas.find((x) => x.clave === par.closest('.rv-fila').dataset.clave);
+    if (f) abrirZoomVs(f);
+    return;
+  }
+  const b = e.target.closest('[data-vs]');
+  if (!b) return;
+  const cont = b.closest('.rv-fila');
+  const f = vs.filas.find((x) => x.clave === cont.dataset.clave);
+  if (!f) return;
+  const a = b.dataset.vs;
+  if (a === 'editar') { vs.abierta = f.clave; pintarVision(); cont.ownerDocument.querySelector(`.rv-fila[data-clave="${CSS.escape(f.clave)}"] input[data-c="modelo"]`)?.focus(); }
+  else if (a === 'cancelar') { vs.abierta = null; pintarVision(); }
+  else if (a === 'guardar') {
+    const c = {};
+    cont.querySelectorAll('input[data-c]').forEach((i) => (c[i.dataset.c] = i.value));
+    decidirVs(f, 'corregida', c);
+  } else if (a === 'ok') decidirVs(f, 'ok');
+  else if (a === 'tarjeta') { if (confirm('¿Descartar este tipo de tarjeta para siempre? Los carritos con esta tarjeta ya no se procesarán.')) decidirVs(f, 'tarjeta_vieja'); }
+  else if (a === 'deshacer') decidirVs(f, 'deshacer');
+});
 $('#rv-album').addEventListener('change', (e) => { rv.album = e.target.value; pintarRevisar(); });
 $('#rv-tipo').addEventListener('change', (e) => { rv.tipo = e.target.value; pintarRevisar(); });
 $('#rv-ver').addEventListener('change', (e) => { rv.ver = e.target.value; pintarRevisar(); });
@@ -1518,10 +1900,13 @@ async function revisarAvance() {
     $('#av-cerrar').hidden = true;
   } else {
     clearInterval(sondeo);
+    cargarUltimos(); // el álbum que acaba de terminar pasa a ser el último
+    cargarPendientes(); // y el siguiente de la lista de Facebook se recorre
+    cargarPreguntas(); // dudas nuevas que haya anotado el scraper
     const ok = t.codigo === 0;
     $('#av-titulo').textContent = `${ok ? '✅' : '⚠️'} ${titulo}: ${ok ? 'listo' : 'terminó con error'}${t.costo != null ? ` · ≈ $${t.costo} MXN` : ''}`;
     $('#av-detener').hidden = true;
-    $('#av-recargar').hidden = !(ok && !t.prueba);
+    $('#av-recargar').hidden = !(ok && !t.prueba && t.tipo !== 'lista');
     $('#av-cerrar').hidden = false;
   }
 }
@@ -1585,6 +1970,10 @@ let versionBase = 0;
     pintarResumen(d);
     pintar();
     cargarRevisar().catch(() => {}); // solo para el contador del botón "Por revisar"
+    cargarVision().catch(() => {}); // contador del botón 👁️ Vision
+    cargarUltimos(); // cinta "Último álbum procesado"
+    cargarPendientes(); // siguiente álbum de cada vendedor en Facebook
+    cargarPreguntas(); // ❓ preguntas del scraper
     // Si hay un álbum procesándose (p. ej. lo iniciaste desde el iPhone), muestra su avance
     const t = await api('/api/album/estado?desde=0');
     if (t.activo) {
