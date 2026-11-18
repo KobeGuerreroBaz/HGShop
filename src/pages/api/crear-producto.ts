@@ -12,7 +12,13 @@ function generarSlug(texto: string) {
 }
 
 function sufijoUnico(assetId: string) {
-  return assetId.replace(/[^a-z0-9]/gi, '').slice(-8).toLowerCase();
+  // El id de Sanity tiene la forma "image-<hash>-<ancho>x<alto>-<extensión>".
+  // Antes se tomaban los últimos 8 caracteres, que son las medidas y la extensión ("x1600jpg"),
+  // así que toda foto de 1600 px recibía el mismo sufijo: 558 de 606 productos quedaron iguales.
+  // El trozo que sí distingue es el hash.
+  const partes = String(assetId || '').split('-');
+  const hash = (partes.length > 1 ? partes[1] : String(assetId || '')).replace(/[^a-z0-9]/gi, '').toLowerCase();
+  return hash.slice(0, 8) || String(assetId || '').replace(/[^a-z0-9]/gi, '').slice(-8).toLowerCase();
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -66,7 +72,24 @@ export const POST: APIRoute = async ({ request }) => {
       assetsGaleria.push(asset);
     }
 
-    const slugFinal = `${generarSlug(titulo)}-${sufijoUnico(assetPrincipal._id)}`;
+    // Si la misma foto se sube dos veces, Sanity reusa el asset y el slug saldría igual.
+    // Antes de crear, se comprueba y se agrega un número al final (-2, -3...) en vez de
+    // dejar dos productos con el mismo slug, que hace que uno se quede sin ficha.
+    const slugBase = `${generarSlug(titulo)}-${sufijoUnico(assetPrincipal._id)}`;
+    let slugFinal = slugBase;
+    try {
+      const usados: string[] = await client.fetch(
+        '*[_type == "producto" && slug.current match $patron].slug.current',
+        { patron: `${slugBase}*` }
+      );
+      if (usados.includes(slugBase)) {
+        let n = 2;
+        while (usados.includes(`${slugBase}-${n}`)) n++;
+        slugFinal = `${slugBase}-${n}`;
+      }
+    } catch (e) {
+      console.warn('[crear-producto] no pude comprobar si el slug ya existe:', e);
+    }
 
     const documento: any = {
       _type: 'producto',

@@ -38,17 +38,31 @@ const LIMITE_POR_VENTANA = 30;
 const VENTANA_SEGUNDOS = 60;
 
 /**
- * Límite simple por IP + ruta usando el KV SESSION (antes declarado y sin usar).
- * El incremento no es atómico, pero es suficiente para el volumen de tráfico
- * admin de esta tienda — no busca ser exacto, solo frenar fuerza bruta/abuso.
+ * Límite por IP + ruta. Usa el limitador de Cloudflare (binding LIMITE), que no gasta
+ * escrituras de KV; si no está disponible, cae al contador en KV como antes.
+ *
+ * Regla de oro: si el limitador falla, NO bloquea. Antes, al agotarse la cuota diaria
+ * de KV, el `put` lanzaba, `verificarAcceso` no lo atrapaba y TODAS las rutas admin
+ * respondían 500 hasta el día siguiente: no se podía subir, preciar ni marcar agotados.
  */
 export async function excedeLimite(request: Request, ruta: string): Promise<boolean> {
   const ip = request.headers.get('cf-connecting-ip') || 'sin-ip';
-  const clave = `ratelimit:${ruta}:${ip}`;
-  const actual = Number((await env.SESSION.get(clave)) || '0');
-  if (actual >= LIMITE_POR_VENTANA) return true;
-  await env.SESSION.put(clave, String(actual + 1), { expirationTtl: VENTANA_SEGUNDOS });
-  return false;
+  const clave = `${ruta}:${ip}`;
+  try {
+    const limitador = (env as any).LIMITE;
+    if (limitador?.limit) {
+      const { success } = await limitador.limit({ key: clave });
+      return !success;
+    }
+    const llave = `ratelimit:${clave}`;
+    const actual = Number((await env.SESSION.get(llave)) || '0');
+    if (actual >= LIMITE_POR_VENTANA) return true;
+    await env.SESSION.put(llave, String(actual + 1), { expirationTtl: VENTANA_SEGUNDOS });
+    return false;
+  } catch (e) {
+    console.warn('[limite] no pude contar, dejo pasar:', e);
+    return false;
+  }
 }
 
 export function demasiadasSolicitudes(): Response {
@@ -61,11 +75,9 @@ export function demasiadasSolicitudes(): Response {
  * Devuelve una Response si hay que cortar, o null si la ruta puede seguir.
  */
 export async function verificarAcceso(request: Request, ruta: string): Promise<Response | null> {
-  if (await excedeLimite(request, ruta)) {
-    return demasiadasSolicitudes();
-  }
-  if (!pinValido(request)) {
-    return noAutorizado();
-  }
-  return null;
+  // Primero el PIN: el uso normal del panel ya no cuenta ni gasta nada.
+  if (pinValido(request)) return null;
+  // Solo se cuentan los intentos FALLIDOS, que es donde sirve frenar la fuerza bruta.
+  if (await excedeLimite(request, `pin:${ruta}`)) return demasiadasSolicitudes();
+  return noAutorizado();
 }

@@ -5,7 +5,8 @@ import { jsonError, jsonOk, verificarAcceso } from '../../lib/api-utils';
 import type { MetadatosBusqueda, MetadatosProductoPedido, ResumenBusquedas } from '../../lib/tipos';
 
 // Resumen para /inventario de lo que buscan y piden los clientes
-// (ver registrar-busqueda.ts y registrar-pedido.ts).
+// (ver src/pages/m/busqueda.ts y src/pages/m/pedido.ts: están fuera de /api/ a propósito,
+// porque Cloudflare Access protege /api/* y eso impedía que los clientes las llamaran).
 const PREFIJO = 'busqueda:';
 const MAXIMO_PAGINAS = 5; // hasta 5,000 términos distintos
 const LIMITE_LISTA = 40;

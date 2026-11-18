@@ -612,16 +612,40 @@ const servidor = http.createServer(async (req, res) => {
       const porPos = new Map();
       for (const f of maestro.filas || []) for (const p of String(f.posiciones || '').split(',').map((x) => Number(x.trim())).filter(Boolean)) porPos.set(`${f.album}_foto_${String(f.foto).padStart(3, '0')}#${p}`, f);
       const corr = leerJson(path.join(CARPETA_SCRAPER, 'vision_correcciones.json'), {});
+      const malas = new Set(corr.malas || []);
+      // Cadena de referencias: una fila de Vision puede colgar de otra fila de Vision. Si algún
+      // eslabón resultó malo, esta fila también hay que revisarla aunque su referencia directa esté bien.
+      const cadenaDe = (f) => {
+        const cadena = [];
+        let cur = f;
+        while (cur?.refClave && cadena.length < 10) {
+          const k = `${cur.refClave}#${cur.refN}`;
+          if (cadena.includes(k)) break;
+          cadena.push(k);
+          const sig = porPos.get(k);
+          if (!sig || sig.fuente !== 'vision' || corr.nombres?.[k]) break;
+          cur = sig;
+        }
+        return cadena;
+      };
       const filas = (maestro.filas || []).filter((f) => f.fuente === 'vision').map((f) => {
         const clave = claveFila(f);
         const ref = porPos.get(`${f.refClave}#${f.refN}`);
         const refCorr = corr.nombres?.[`${f.refClave}#${f.refN}`];
         const dec = revision[clave] || null;
+        const cadena = cadenaDe(f);
+        const malaEnCadena = cadena.find((k) => malas.has(k)) || '';
+        const propia = malaEnCadena === `${f.refClave}#${f.refN}`;
+        const notaCadena = malaEnCadena
+          ? `Referencia mala: ${propia ? 'su referencia' : `cuelga de ${malaEnCadena}, que`} resultó mala en el panel; conviene revisar este nombre`
+          : '';
         return {
           clave, album: f.album, foto: f.foto, pos: Number(String(f.posiciones || '').split(',')[0]) || 1,
           marca: f.marca || '', modelo: f.modelo || '', serie: f.serie || '', numero: f.numero || '',
           precio: typeof f.precioUnitario === 'number' ? f.precioUnitario : null,
-          puntaje: f.puntaje || 0, dudoso: !!f.dudoso, revisar: !!f.revisar, notas: f.notas || '', url: f.url || '',
+          puntaje: f.puntaje || 0, dudoso: !!f.dudoso, revisar: !!f.revisar || !!malaEnCadena,
+          notas: [f.notas || '', notaCadena].filter(Boolean).join(' | '),
+          malaEnCadena, saltos: cadena.length, url: f.url || '',
           archivoFoto: f.archivoFoto || null, cuadricula: f.cuadricula || '3x2',
           refClave: f.refClave || '', refN: f.refN || 1, refCuadricula: f.refCuadricula || '3x2', refArchivo: f.refClave ? archivoDe(f.refClave) : null,
           refModelo: refCorr?.modelo || ref?.modelo || '', refPrecio: typeof ref?.precioUnitario === 'number' ? ref.precioUnitario : null,

@@ -32,7 +32,13 @@ function generarSlug(texto) {
 }
 
 function sufijoUnico(assetId) {
-  return assetId.replace(/[^a-z0-9]/gi, '').slice(-8).toLowerCase();
+  // El id de Sanity tiene la forma "image-<hash>-<ancho>x<alto>-<extensión>".
+  // Antes se tomaban los últimos 8 caracteres, que son las medidas y la extensión ("x1600jpg"),
+  // así que toda foto de 1600 px recibía el mismo sufijo: 558 de 606 productos quedaron iguales.
+  // El trozo que sí distingue es el hash.
+  const partes = String(assetId || '').split('-');
+  const hash = (partes.length > 1 ? partes[1] : String(assetId || '')).replace(/[^a-z0-9]/gi, '').toLowerCase();
+  return hash.slice(0, 8) || String(assetId || '').replace(/[^a-z0-9]/gi, '').slice(-8).toLowerCase();
 }
 
 async function redimensionarParaAnalisis(buffer) {

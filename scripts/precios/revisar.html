@@ -1675,10 +1675,12 @@ function tarjetaVs(f) {
   const chips = [
     f.dudoso ? '<span class="chip ambar">🤔 Dudoso</span>' : '',
     /Precio raro/.test(f.notas) ? '<span class="chip rojo">💲 Precio raro</span>' : '',
+    f.malaEnCadena ? `<span class="chip rojo" title="${esc(f.malaEnCadena)}">⛓ Referencia mala</span>` : '',
+    f.saltos > 1 ? `<span class="chip gris" title="El nombre viene de ${f.saltos} saltos atrás">⛓ ${f.saltos} saltos</span>` : '',
     `<span class="chip ${f.puntaje >= PUNTAJE_SEGURO ? 'verde' : 'gris'}">puntaje ${f.puntaje}</span>`,
     dec === 'corregida' ? '<span class="chip azul">✎ Corregido</span>' : dec === 'revisada' ? '<span class="chip verde">✓ Bien</span>' : dec === 'descartada' ? '<span class="chip gris">🗑 Tarjeta vieja</span>' : '',
   ].join('');
-  const nota = (f.notas || '').split('|').map((x) => x.trim()).filter((x) => /Dudoso|Precio raro/.test(x)).join(' · ');
+  const nota = (f.notas || '').split('|').map((x) => x.trim()).filter((x) => /Dudoso|Precio raro|Referencia mala/.test(x)).join(' · ');
   const abierta = vs.abierta === f.clave;
   return `<div class="rv-fila${dec ? ' hecha' : ''}" data-clave="${esc(f.clave)}">
     <div class="vs-par">${recorte(f.archivoFoto, f.cuadricula, f.pos, 'esta foto')}${recorte(f.refArchivo, f.refCuadricula, f.refN, 'referencia')}</div>
@@ -1719,7 +1721,7 @@ function pintarVisionLista() {
   if (vs.ver === 'pendientes') filas = filas.filter((f) => !f.decision);
   if (vs.ver === 'decididas') filas = filas.filter((f) => f.decision);
   if (!filas.length) { $('#vs-lista').innerHTML = '<div class="vacio">Nada por aquí.</div>'; return; }
-  const alerta = filas.filter((f) => f.dudoso || /Precio raro/.test(f.notas));
+  const alerta = filas.filter((f) => f.dudoso || /Precio raro|Referencia mala/.test(f.notas));
   const resto = filas.filter((f) => !alerta.includes(f)).sort((a, b) => a.puntaje - b.puntaje);
   const bajos = resto.filter((f) => f.puntaje < PUNTAJE_SEGURO), seguros = resto.filter((f) => f.puntaje >= PUNTAJE_SEGURO);
   $('#vs-lista').innerHTML =

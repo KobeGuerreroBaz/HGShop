@@ -24,6 +24,7 @@ export const GET: APIRoute = async ({ request, url }) => {
       `*[_type == "producto" && !defined(precio) ${filtroDepartamento}]{
         _id,
         titulo,
+        "slug": slug.current,
         imagenPrincipal,
         cantidadDisponible,
         marca,
@@ -40,6 +41,7 @@ export const GET: APIRoute = async ({ request, url }) => {
     const productosConImagen: ProductoParaAdmin[] = productos.map((p: any) => ({
       _id: p._id,
       titulo: p.titulo,
+      slug: p.slug,
       cantidadDisponible: p.cantidadDisponible,
       marca: p.marca,
       palabrasClave: p.palabrasClave,

@@ -25,6 +25,15 @@
 	"vars": {
 		"SANITY_PROJECT_ID": "lit3j3pr"
 	},
+	// Limitador de solicitudes de Cloudflare: no gasta escrituras de KV (el plan gratis
+	// permite 1,000 al día y antes cada llamada admin se comía una).
+	"ratelimits": [
+		{
+			"name": "LIMITE",
+			"namespace_id": "1001",
+			"simple": { "limit": 30, "period": 60 }
+		}
+	],
 	"kv_namespaces": [
 		{
 			"binding": "SESSION",

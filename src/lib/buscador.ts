@@ -295,9 +295,9 @@ export function crearRegistradorBusquedas(pagina: string, esperaMs = 1500) {
     ultimoEnviado = clave;
     const cuerpo = JSON.stringify({ termino, resultados, pagina });
     try {
-      const enviado = navigator.sendBeacon?.('/api/registrar-busqueda', new Blob([cuerpo], { type: 'application/json' }));
+      const enviado = navigator.sendBeacon?.('/m/busqueda', new Blob([cuerpo], { type: 'application/json' }));
       if (!enviado) {
-        fetch('/api/registrar-busqueda', { method: 'POST', body: cuerpo, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {});
+        fetch('/m/busqueda', { method: 'POST', body: cuerpo, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {});
       }
     } catch {
       // El registro es opcional: nunca debe afectar la búsqueda.

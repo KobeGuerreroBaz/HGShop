@@ -74,8 +74,8 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div id="pantalla-producto" class="hidden">
-      <button id="boton-volver-departamento" type="button" class="hidden text-xs text-neutral-400 underline">← Volver a la lista</button>
-      <button id="boton-volver-busqueda" type="button" class="hidden text-xs text-neutral-400 underline">← Buscar otro producto</button>
+      <button id="boton-volver-departamento" type="button" class="hidden border border-neutral-300 text-neutral-700 rounded-md px-3 py-2 text-sm font-medium">← Volver a la lista</button>
+      <button id="boton-volver-busqueda" type="button" class="hidden border border-neutral-300 text-neutral-700 rounded-md px-3 py-2 text-sm font-medium">← Volver a la búsqueda</button>
       <p id="contador" class="text-sm text-neutral-500 mt-2"></p>
 
       <div id="tarjeta" class="mt-3 border border-neutral-200 rounded-xl p-4">
@@ -115,6 +115,24 @@ import Layout from '../layouts/Layout.astro';
           <div>
             <label class="text-xs text-neutral-500">Palabras clave (separadas por coma)</label>
             <input id="campo-palabras" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Título (lo que ve el cliente)</label>
+            <input id="campo-titulo" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div class="border border-amber-200 bg-amber-50 rounded-md p-3">
+            <div class="flex items-center gap-2">
+              <input id="campo-cambiar-direccion" type="checkbox" class="h-4 w-4" />
+              <label for="campo-cambiar-direccion" class="text-xs font-medium text-neutral-700">Cambiar la dirección de la ficha</label>
+            </div>
+            <p class="text-xs text-neutral-600 mt-2">
+              La dirección vieja deja de existir y queda en 404: se pierde lo que haya ganado en Google
+              y los links guardados dejan de servir. Solo tiene sentido si el producto todavía no tiene
+              ficha propia (dos productos con la misma dirección) o si nunca se ha publicado.
+            </p>
+            <input id="campo-slug" type="text" disabled
+              class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm mt-2 disabled:bg-neutral-100 disabled:text-neutral-400" />
+            <p id="vista-direccion" class="text-xs text-neutral-500 mt-1 break-all"></p>
           </div>
         </div>
 
@@ -180,6 +198,10 @@ import Layout from '../layouts/Layout.astro';
   const pantallaDepartamento = document.getElementById('pantalla-departamento') as HTMLElement;
   const pantallaBusqueda = document.getElementById('pantalla-busqueda') as HTMLElement;
   const pantallaProducto = document.getElementById('pantalla-producto') as HTMLElement;
+  const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement;
+  const campoSlug = document.getElementById('campo-slug') as HTMLInputElement;
+  const campoCambiarDireccion = document.getElementById('campo-cambiar-direccion') as HTMLInputElement;
+  const vistaDireccion = document.getElementById('vista-direccion') as HTMLElement;
   const pantallaFin = document.getElementById('pantalla-fin') as HTMLElement;
 
   const inputPin = document.getElementById('input-pin') as HTMLInputElement;
@@ -567,6 +589,17 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
+  campoCambiarDireccion.addEventListener('change', () => {
+    campoSlug.disabled = !campoCambiarDireccion.checked;
+    if (campoCambiarDireccion.checked) campoSlug.focus();
+  });
+  campoSlug.addEventListener('input', () => {
+    const limpio = campoSlug.value
+      .trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    vistaDireccion.textContent = limpio ? `hgstoremx.com/productos/${limpio}/` : '';
+  });
+
   botonVolverDepartamento.addEventListener('click', () => {
     mostrarListaProductos();
   });
@@ -592,6 +625,11 @@ import Layout from '../layouts/Layout.astro';
     campoCantidad.value = producto.cantidadDisponible != null ? String(producto.cantidadDisponible) : '';
     campoMarca.value = producto.marca || '';
     campoPalabras.value = (producto.palabrasClave || []).join(', ');
+    campoTitulo.value = producto.titulo || '';
+    campoSlug.value = producto.slug || '';
+    campoCambiarDireccion.checked = false;
+    campoSlug.disabled = true;
+    vistaDireccion.textContent = producto.slug ? `hgstoremx.com/productos/${producto.slug}/` : '';
     detallesOpcionales.classList.add('hidden');
     botonMostrarDetalles.textContent = '+ Agregar más detalles';
 
@@ -770,6 +808,8 @@ import Layout from '../layouts/Layout.astro';
         palabrasClave,
         mostrarExistencias: campoExistencias.checked,
         agotado: campoAgotado.checked,
+        titulo: campoTitulo.value,
+        ...(campoCambiarDireccion.checked && campoSlug.value.trim() ? { slug: campoSlug.value } : {}),
       }),
     });
     const resultado: { ok: boolean; error?: string } = await respuesta.json();

@@ -15,9 +15,9 @@ export function registrarEvento(tipo: TipoEvento, productos: ProductoEvento[]) {
   if (productos.length === 0) return;
   const cuerpo = JSON.stringify({ tipo, productos: productos.slice(0, 30) });
   try {
-    const enviado = navigator.sendBeacon?.('/api/registrar-pedido', new Blob([cuerpo], { type: 'application/json' }));
+    const enviado = navigator.sendBeacon?.('/m/pedido', new Blob([cuerpo], { type: 'application/json' }));
     if (!enviado) {
-      fetch('/api/registrar-pedido', {
+      fetch('/m/pedido', {
         method: 'POST',
         body: cuerpo,
         keepalive: true,

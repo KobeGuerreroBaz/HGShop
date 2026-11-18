@@ -42,13 +42,34 @@ export async function getStaticPaths() {
     `),
   ]);
 
-  // Si dos productos compartieran slug, se queda el primero (igual que antes con [0]).
+  // Si dos productos comparten slug, se queda el primero y el otro se queda SIN FICHA:
+  // su tarjeta aparece en el catálogo pero lleva a la página del primero. Antes pasaba
+  // en silencio; ahora el build lo grita con los títulos, para poder arreglarlo en Sanity.
   const slugsVistos = new Set<string>();
+  const descartados: any[] = [];
   const productosUnicos = productos.filter((producto: any) => {
-    if (slugsVistos.has(producto.slug)) return false;
+    if (slugsVistos.has(producto.slug)) {
+      descartados.push(producto);
+      return false;
+    }
     slugsVistos.add(producto.slug);
     return true;
   });
+  if (descartados.length) {
+    const porSlug = new Map<string, string[]>();
+    for (const p of descartados) {
+      const quedo = productos.find((x: any) => x.slug === p.slug);
+      if (!porSlug.has(p.slug)) porSlug.set(p.slug, [quedo?.titulo || '?']);
+      porSlug.get(p.slug)!.push(p.titulo || '?');
+    }
+    console.warn(`\n⚠️  SLUGS REPETIDOS: ${descartados.length} producto(s) se quedaron sin ficha propia.`);
+    for (const [slug, titulos] of porSlug) {
+      console.warn(`   ${slug}`);
+      console.warn(`      se queda: ${titulos[0]}`);
+      for (const t of titulos.slice(1)) console.warn(`      SIN FICHA: ${t}`);
+    }
+    console.warn('   Arréglalo en Sanity Studio: fusiona los repetidos o cambia el slug del segundo.\n');
+  }
 
   // "También te puede gustar": hasta 4 del mismo subdepartamento (y si no alcanzan,
   // del mismo departamento). Solo disponibles y con foto; primero los que tienen

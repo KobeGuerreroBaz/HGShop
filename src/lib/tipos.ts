@@ -20,6 +20,8 @@ export interface ProductoParaAdmin {
   mostrarExistencias?: boolean;
   agotado?: boolean;
   categoriaTitulo?: string;
+  /** Dirección de la ficha: hgstoremx.com/productos/<slug>/ */
+  slug?: string;
   /** _id de la categoría actual y su departamento (slug); se usan para mover el producto. */
   categoriaId?: string;
   departamento?: string;
