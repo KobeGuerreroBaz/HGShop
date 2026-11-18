@@ -31,3 +31,6 @@ pnpm-debug.log*
 
 # reportes de scripts (referencias de precio)
 scripts/salida/
+
+# respaldos locales antes de cambios (no son codigo del sitio)
+respaldos/

@@ -53,6 +53,11 @@ export function estaBloqueado(): boolean {
   return contarCarrito() > 0;
 }
 
+/** Números de WhatsApp distintos que hay en la lista. Si son dos, el pedido solo llega a uno. */
+export function numerosDelCarrito(): string[] {
+  return [...new Set(obtenerCarrito().map((item) => item.numeroWhatsApp).filter(Boolean))];
+}
+
 export function construirEnvioCarrito(
   numeroDefault: string
 ): { numero: string; mensaje: string } | null {

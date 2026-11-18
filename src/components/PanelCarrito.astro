@@ -25,15 +25,38 @@ const { numeroDefault } = Astro.props;
       Se abrirá WhatsApp con tu lista. El pago y la entrega se acuerdan ahí; este sitio no hace ningún cargo.
     </p>
 
-    <button
+    <p id="carrito-dos-numeros" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-2">
+      Tu lista tiene productos que atienden dos personas distintas. Este pedido llega a una sola;
+      lo demás mándalo en otro pedido.
+    </p>
+
+    <!-- Enlace de verdad, no window.open: en los navegadores de Facebook e Instagram la ventana
+         emergente puede no abrirse, y así el cliente se quedaba sin carrito creyendo que ya pidió. -->
+    <a
       id="btn-enviar-carrito"
-      type="button"
-      class="w-full inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+      href="#"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="w-full inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-700 transition-colors aria-disabled:opacity-40 aria-disabled:pointer-events-none"
     >
       Enviar pedido por WhatsApp
-    </button>
+    </a>
 
-    <div id="carrito-confirmacion" class="hidden text-center py-6">
+    <!-- El carrito NO se vacía al tocar el botón: primero se pregunta si WhatsApp abrió. -->
+    <div id="carrito-confirmacion" class="hidden py-4 space-y-3">
+      <p class="text-sm font-medium text-neutral-900 text-center">¿Se abrió WhatsApp con tu lista?</p>
+      <p class="text-xs text-neutral-500 text-center">Tu lista sigue guardada aquí por si acaso.</p>
+      <a id="btn-reintentar-whatsapp" href="#" target="_blank" rel="noopener noreferrer"
+        class="w-full inline-flex items-center justify-center rounded-md border border-neutral-300 px-4 py-3 text-sm font-medium text-neutral-700">
+        No se abrió, intentar otra vez
+      </a>
+      <button id="btn-ya-pedi" type="button"
+        class="w-full inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-3 text-sm font-medium text-white">
+        Sí, ya mandé mi pedido
+      </button>
+    </div>
+
+    <div id="carrito-listo" class="hidden text-center py-6">
       <p class="text-2xl mb-2">✅</p>
       <p class="text-sm font-medium text-neutral-900">¡Pedido enviado!</p>
       <p class="text-sm text-neutral-500 mt-1">En breve te atendemos por WhatsApp.</p>
@@ -42,7 +65,7 @@ const { numeroDefault } = Astro.props;
 </div>
 
 <script>
-  import { obtenerCarrito, quitarDelCarrito, construirEnvioCarrito } from '../lib/carrito';
+  import { obtenerCarrito, quitarDelCarrito, construirEnvioCarrito, numerosDelCarrito } from '../lib/carrito';
   import { registrarEvento } from '../lib/metricas';
 
   function renderizarCarrito() {
@@ -50,7 +73,7 @@ const { numeroDefault } = Astro.props;
     const numeroDefault = panel?.dataset.numeroDefault || '';
     const lista = document.getElementById('lista-carrito');
     const vacio = document.getElementById('carrito-vacio');
-    const btnEnviar = document.getElementById('btn-enviar-carrito') as HTMLButtonElement | null;
+    const btnEnviar = document.getElementById('btn-enviar-carrito') as HTMLAnchorElement | null;
     const contador = document.getElementById('contador-carrito');
     const aviso = document.getElementById('carrito-aviso');
 
@@ -65,21 +88,36 @@ const { numeroDefault } = Astro.props;
     if (items.length === 0) {
       vacio.classList.remove('hidden');
       aviso?.classList.add('hidden');
-      btnEnviar.disabled = true;
+      btnEnviar.setAttribute('aria-disabled', 'true');
+      document.getElementById('carrito-dos-numeros')?.classList.add('hidden');
       return;
     }
 
     vacio.classList.add('hidden');
     aviso?.classList.remove('hidden');
-    btnEnviar.disabled = false;
+    btnEnviar.removeAttribute('aria-disabled');
+
+    // El enlace se arma aquí, antes de que lo toquen: así el navegador lo trata como
+    // un clic normal del usuario y lo abre hasta dentro de Facebook o Instagram.
+    const envio = construirEnvioCarrito(numeroDefault);
+    const enlace = envio ? `https://wa.me/${envio.numero}?text=${encodeURIComponent(envio.mensaje)}` : '#';
+    btnEnviar.href = enlace;
+    const reintentar = document.getElementById('btn-reintentar-whatsapp') as HTMLAnchorElement | null;
+    if (reintentar) reintentar.href = enlace;
+    document.getElementById('carrito-dos-numeros')?.classList.toggle('hidden', numerosDelCarrito().length < 2);
 
     items.forEach((item) => {
       const li = document.createElement('li');
       li.className = 'flex items-center justify-between gap-3';
-      li.innerHTML = `
-        <span class="text-sm text-neutral-900 line-clamp-2">${item.titulo}</span>
-        <button type="button" data-quitar-slug="${item.slug}" class="text-neutral-400 hover:text-red-600 text-lg leading-none px-2">&times;</button>
-      `;
+      const texto = document.createElement('span');
+      texto.className = 'text-sm text-neutral-900 line-clamp-2';
+      texto.textContent = item.titulo; // sin innerHTML: un título con < o & ya no se pinta mal
+      const quitar = document.createElement('button');
+      quitar.type = 'button';
+      quitar.className = 'text-neutral-400 hover:text-red-600 text-lg leading-none px-2';
+      quitar.dataset.quitarSlug = item.slug;
+      quitar.textContent = '×';
+      li.append(texto, quitar);
       lista.appendChild(li);
     });
 
@@ -105,37 +143,34 @@ const { numeroDefault } = Astro.props;
       document.getElementById('panel-carrito')?.classList.add('hidden');
     });
 
-    document.getElementById('btn-enviar-carrito')?.addEventListener('click', () => {
-      const panel = document.getElementById('panel-carrito');
-      const numeroDefault = panel?.dataset.numeroDefault || '';
-      const envio = construirEnvioCarrito(numeroDefault);
-      if (!envio) return;
-
-      // 0. Contar (anónimo) qué productos se pidieron, antes de vaciar el carrito.
+    // Al tocar el enlace: el navegador abre WhatsApp por su cuenta. Aquí solo se registra
+    // el pedido y se pasa a preguntar si de verdad abrió. El carrito NO se vacía todavía.
+    document.getElementById('btn-enviar-carrito')?.addEventListener('click', (e) => {
+      const enlace = e.currentTarget as HTMLAnchorElement;
+      if (enlace.getAttribute('aria-disabled') === 'true' || enlace.getAttribute('href') === '#') {
+        e.preventDefault();
+        return;
+      }
       registrarEvento('pedido', obtenerCarrito().map((item) => ({ slug: item.slug, titulo: item.titulo })));
-
-      // 1. Abrir WhatsApp
-      const link = `https://wa.me/${envio.numero}?text=${encodeURIComponent(envio.mensaje)}`;
-      window.open(link, '_blank', 'noopener,noreferrer');
-
-      // 2. Vaciar el carrito
-      localStorage.removeItem('hg_carrito');
-      document.dispatchEvent(new CustomEvent('carrito-actualizado'));
-
-      // 3. Mostrar confirmación en el panel
       document.getElementById('lista-carrito')?.classList.add('hidden');
       document.getElementById('carrito-vacio')?.classList.add('hidden');
       document.getElementById('carrito-aviso')?.classList.add('hidden');
-      document.getElementById('btn-enviar-carrito')?.classList.add('hidden');
+      document.getElementById('carrito-dos-numeros')?.classList.add('hidden');
+      enlace.classList.add('hidden');
       document.getElementById('carrito-confirmacion')?.classList.remove('hidden');
+    });
 
-      // 4. Cerrar panel después de 2.5 segundos y restaurar estado
+    // "Sí, ya mandé mi pedido": hasta aquí se vacía la lista.
+    document.getElementById('btn-ya-pedi')?.addEventListener('click', () => {
+      localStorage.removeItem('hg_carrito');
+      document.dispatchEvent(new CustomEvent('carrito-actualizado'));
+      document.getElementById('carrito-confirmacion')?.classList.add('hidden');
+      document.getElementById('carrito-listo')?.classList.remove('hidden');
       setTimeout(() => {
         document.getElementById('panel-carrito')?.classList.add('hidden');
+        document.getElementById('carrito-listo')?.classList.add('hidden');
         document.getElementById('lista-carrito')?.classList.remove('hidden');
         document.getElementById('btn-enviar-carrito')?.classList.remove('hidden');
-        document.getElementById('carrito-confirmacion')?.classList.add('hidden');
-        // Deja el panel coherente con el carrito (vacío) para la próxima vez que se abra
         renderizarCarrito();
       }, 2500);
     });
