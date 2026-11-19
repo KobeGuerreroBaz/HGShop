@@ -84,12 +84,12 @@
     acciones.classList.add('hidden');
   }
 
-  async function buscarParecidos(titulo: string, palabrasClave: string[]) {
+  async function buscarParecidos(titulo: string, palabrasClave: string[], modo: 'auto' | 'manual' = 'auto') {
     const pin = localStorage.getItem(CLAVE_PIN) || '';
     const respuesta = await fetch('/api/buscar-parecidos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-upload-pin': pin },
-      body: JSON.stringify({ titulo, palabrasClave }),
+      body: JSON.stringify({ titulo, palabrasClave, modo }),
     });
     if (!respuesta.ok) throw new Error('No se pudo consultar el catálogo');
     return await respuesta.json();
@@ -180,8 +180,8 @@
     const original = botonBuscar.textContent;
     botonBuscar.textContent = '...';
     try {
-      const resultados = await buscarParecidos(texto, []);
-      if (resultados.length === 0) sinResultados('No encontré nada parecido en tu catálogo.');
+      const resultados = await buscarParecidos(texto, [], 'manual');
+      if (resultados.length === 0) sinResultados(`No encontré nada con "${texto}" en tu catálogo.`);
       else mostrar(resultados, false);
     } catch (error: any) {
       sinResultados(`No se pudo buscar: ${error.message}`);

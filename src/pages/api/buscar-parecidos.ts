@@ -20,6 +20,7 @@ import { tokens, distintivas } from '../../lib/emparejar-precios.mjs';
 
 const MAX_CANDIDATOS = 60;
 const MAX_RESULTADOS = 5;
+const MAX_RESULTADOS_MANUAL = 10; // buscando a mano se quiere ver la lista, no solo lo mas parecido
 const PUNTAJE_MINIMO = 0.2;
 
 /** Un codigo de empaque: mezcla letras y numeros, 4 o mas caracteres (hlh72, dkl20). */
@@ -31,13 +32,19 @@ export const POST: APIRoute = async ({ request }) => {
   const bloqueo = await verificarAcceso(request, 'buscar-parecidos');
   if (bloqueo) return bloqueo;
 
-  let cuerpo: { titulo?: string; palabrasClave?: string[]; excluirId?: string };
+  let cuerpo: { titulo?: string; palabrasClave?: string[]; excluirId?: string; modo?: string };
   try {
     cuerpo = await request.json();
   } catch {
     return jsonError('Cuerpo invalido', 400);
   }
 
+  // "auto" = el aviso despues de analizar la foto: exige que coincida algo que identifique el
+  // modelo, para que un Porsche no arrastre todos los Porsche del catalogo.
+  // "manual" = el buscador de arriba, donde tu escribes: ahi SI quieres ver todos los Volkswagen
+  // al escribir "Volkswagen". Antes los dos usaban la regla estricta y por eso buscar una marca
+  // sola no devolvia nada.
+  const manual = cuerpo.modo === 'manual';
   const titulo = (cuerpo.titulo || '').trim();
   const claves = Array.isArray(cuerpo.palabrasClave) ? cuerpo.palabrasClave : [];
   if (titulo.length < 2 && claves.length === 0) return jsonOk([]);
@@ -61,7 +68,7 @@ export const POST: APIRoute = async ({ request }) => {
         "categoriaTitulo": categoria->titulo,
         "departamento": categoria->departamento
       }[0...$tope]`,
-      { patrones: buscables.map((t) => `*${t}*`), tope: MAX_CANDIDATOS }
+      { patrones: buscables.map((t) => `*${t}*`), tope: manual ? MAX_CANDIDATOS * 3 : MAX_CANDIDATOS }
     );
 
     const puntuados = candidatos
@@ -75,7 +82,7 @@ export const POST: APIRoute = async ({ request }) => {
         // asi un "Porsche 911 GT3" no arrastra todos los Porsche del catalogo.
         const codigoComun = comunes.find(esCodigo);
         const hayDistintiva = comunes.some((t) => distConsulta.has(t));
-        if (!codigoComun && !hayDistintiva) return null;
+        if (!manual && !codigoComun && !hayDistintiva) return null;
 
         let puntaje = comunes.length / toksConsulta.length;
         if (codigoComun) puntaje = Math.min(1, puntaje + 0.5); // el codigo es casi definitivo
@@ -97,7 +104,7 @@ export const POST: APIRoute = async ({ request }) => {
       })
       .filter((r: any) => r && r.puntaje >= PUNTAJE_MINIMO * 100)
       .sort((a: any, b: any) => b.puntaje - a.puntaje)
-      .slice(0, MAX_RESULTADOS);
+      .slice(0, manual ? MAX_RESULTADOS_MANUAL : MAX_RESULTADOS);
 
     return jsonOk(puntuados);
   } catch (error: any) {
