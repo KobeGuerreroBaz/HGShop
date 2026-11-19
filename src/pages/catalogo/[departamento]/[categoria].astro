@@ -1,0 +1,367 @@
+---
+import { sanityClient, urlFor, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../../lib/sanity';
+import Layout from '../../../layouts/Layout.astro';
+import MenuHamburguesa from '../../../components/MenuHamburguesa.astro';
+import Footer from '../../../components/Footer.astro';
+import BotonCarrito from '../../../components/BotonCarrito.astro';
+import PanelCarrito from '../../../components/PanelCarrito.astro';
+import ProductCard from '../../../components/ProductCard.astro';
+import { tienePaginaPropia, yaIncluyeElNombre, disponiblesPrimero, slugDeCategoria } from '../../../lib/categorias';
+
+// Páginas de subdepartamento: /catalogo/<departamento>/<categoria>/
+//
+// Convive con [departamento].astro, que sigue mostrando el departamento completo
+// agrupado por categorías. Esta ruta le da URL propia a las categorías que ya
+// tienen peso, para que puedan posicionar por su propia intención de búsqueda
+// ("hot wheels premium monterrey", "cremas corporales bath and body works").
+// El slug de categoría ya existía en Sanity y nunca se había usado para rutas.
+//
+// QUIÉN LLEVA PÁGINA: lo decide el código, no una lista que haya que mantener a
+// mano. Una categoría genera página si cumple las TRES condiciones:
+//   1. Tiene MINIMO_PRODUCTOS o más.
+//   2. No se llama como su departamento (esRedundante): la categoría
+//      "Hot Wheels" dentro del departamento hot-wheels sería un duplicado de la
+//      página de departamento.
+//   3. No es el departamento completo: si la categoría tiene TODOS los productos
+//      de su departamento (ej. "Vehículos" son los 45 de cars), su página sería
+//      un clon de /catalogo/cars/. esRedundante NO lo detecta, porque los
+//      nombres no se parecen; de ahí esta tercera condición.
+//
+// Así, cuando una categoría crezca hasta el mínimo, su página aparece sola en el
+// siguiente deploy, sin tocar código. Y mientras una categoría esté a medio
+// llenar simplemente no genera página: no se borra ni se fusiona nada.
+//
+// ⚠️ OJO CON ASTRO: getStaticPaths() se saca del componente y corre en el ámbito
+// del MÓDULO. Solo ve los import de arriba; NO ve las constantes ni las
+// funciones declaradas aquí en el frontmatter, porque ésas viven dentro de la
+// función de render de la página. Si declaras algo arriba y lo usas adentro, el
+// dev server truena con "X is not defined". Por eso los ayudantes se importan
+// de src/lib/categorias.ts: los import sí son de módulo y sí los ve.
+
+export async function getStaticPaths() {
+  // Todo se trae UNA sola vez aquí y se pasa a cada página como props, igual que
+  // en productos/[slug].astro: si cada página consultara por su cuenta serían
+  // decenas de consultas extra en cada build.
+  const [productos, categorias, configWhatsApp, todosDepartamentos] = await Promise.all([
+    sanityClient.fetch(`
+      *[_type == "producto" && defined(categoria) && defined(slug.current)]{
+        "slug": slug.current,
+        titulo,
+        precio,
+        descripcion,
+        altTexto,
+        imagenPrincipal,
+        edicion,
+        agotado,
+        "categoriaId": categoria._ref
+      }
+    `),
+    sanityClient.fetch(`
+      *[_type == "categoria" && defined(departamento) && defined(slug.current)]{
+        _id,
+        titulo,
+        "slug": slug.current,
+        departamento
+      }
+    `),
+    obtenerConfiguracionWhatsApp(),
+    // El menú hamburguesa y el footer listan todos los departamentos.
+    sanityClient.fetch(`
+      array::unique(*[_type == "categoria" && defined(departamento)].departamento)
+    `),
+  ]);
+
+  const porCategoria = new Map<string, any[]>();
+  for (const producto of productos) {
+    if (!producto.categoriaId) continue;
+    const lista = porCategoria.get(producto.categoriaId);
+    if (lista) lista.push(producto);
+    else porCategoria.set(producto.categoriaId, [producto]);
+  }
+
+  const totalDe = (cat: any): number => (porCategoria.get(cat._id) || []).length;
+
+  // Productos por departamento, para la condición 3.
+  const totalPorDepartamento = new Map<string, number>();
+  for (const cat of categorias) {
+    const acumulado = totalPorDepartamento.get(cat.departamento) || 0;
+    totalPorDepartamento.set(cat.departamento, acumulado + totalDe(cat));
+  }
+
+  const candidatas = categorias.filter((cat: any) =>
+    tienePaginaPropia({
+      titulo: cat.titulo,
+      slug: cat.slug,
+      totalCategoria: totalDe(cat),
+      totalDepartamento: totalPorDepartamento.get(cat.departamento) || 0,
+      nombreDepartamento: nombreDepartamento(cat.departamento, configWhatsApp),
+    })
+  );
+
+  // Si dos categorías del mismo departamento comparten slug, se queda la primera
+  // y el build lo grita con los títulos, igual que productos/[slug].astro hace
+  // con los productos repetidos. Hoy no pasa, pero el catálogo sigue creciendo.
+  const vistas = new Set<string>();
+  const conPagina: any[] = [];
+  const repetidas: any[] = [];
+  for (const cat of candidatas) {
+    const clave = `${cat.departamento}/${slugDeCategoria(cat.slug)}`;
+    if (vistas.has(clave)) {
+      repetidas.push(cat);
+      continue;
+    }
+    vistas.add(clave);
+    conPagina.push(cat);
+  }
+  if (repetidas.length > 0) {
+    console.warn('\n⚠️  Slug de categoría repetido dentro del mismo departamento:');
+    for (const cat of repetidas) {
+      console.warn(`   /catalogo/${cat.departamento}/${slugDeCategoria(cat.slug)}/  →  "${cat.titulo}" se queda SIN PÁGINA`);
+    }
+    console.warn('   Cámbiale el slug a una de las dos en Sanity.\n');
+  }
+
+  return conPagina.map((cat: any) => {
+    const nombreDepto = nombreDepartamento(cat.departamento, configWhatsApp);
+    const lista = disponiblesPrimero(porCategoria.get(cat._id) || []);
+    const total = lista.length;
+    const palabraProductos = total === 1 ? 'producto' : 'productos';
+
+    const precios = lista
+      .map((p: any) => p.precio)
+      .filter((n: any) => typeof n === 'number' && n > 0);
+    const precioMinimo = precios.length > 0 ? Math.min(...precios) : null;
+    const sufijoDesde = precioMinimo != null ? `, desde $${precioMinimo} MXN` : '';
+
+    // El departamento solo se agrega al título cuando aporta algo: "Hot Wheels
+    // Premium" ya dice Hot Wheels; "Cremas corporales" no dice Bath and Body.
+    const tituloPagina = yaIncluyeElNombre(cat.titulo, nombreDepto)
+      ? `${cat.titulo} en Monterrey | HG Store MX`
+      : `${cat.titulo} ${nombreDepto} en Monterrey | HG Store MX`;
+
+    const hermanas = conPagina
+      .filter((otra: any) => otra.departamento === cat.departamento && otra._id !== cat._id)
+      .map((otra: any) => ({
+        titulo: otra.titulo,
+        slug: slugDeCategoria(otra.slug),
+        total: totalDe(otra),
+      }))
+      .sort((a: any, b: any) => b.total - a.total);
+
+    return {
+      // El slug va en minúsculas: "Biberones" en Sanity da /bebes/biberones/.
+      // Si algún día se corrige ese slug en Sanity, la URL no cambia.
+      params: { departamento: cat.departamento, categoria: slugDeCategoria(cat.slug) },
+      props: {
+        tituloCategoria: cat.titulo,
+        slugCategoria: slugDeCategoria(cat.slug),
+        productos: lista,
+        hermanas,
+        configWhatsApp,
+        todosDepartamentos,
+        // Calculados aquí (una vez por página en el build) y no en el render.
+        tituloPagina,
+        descripcionMeta: `Encuentra ${cat.titulo} en Monterrey: ${total} ${palabraProductos} en el catálogo${sufijoDesde}. Entrega personal en Monterrey y envío a toda la República Mexicana.`,
+        parrafoEntrada: `${total} ${palabraProductos} de ${cat.titulo}${sufijoDesde}.`,
+      },
+    };
+  });
+}
+
+const { departamento } = Astro.params as { departamento: string };
+const {
+  tituloCategoria,
+  slugCategoria,
+  productos,
+  hermanas,
+  configWhatsApp,
+  todosDepartamentos,
+  tituloPagina,
+  descripcionMeta,
+  parrafoEntrada,
+} = Astro.props;
+
+const LIMITE_INICIAL = 12;
+const TANDA_VER_MAS = 24;
+
+const nombreDepartamentoTexto = nombreDepartamento(departamento, configWhatsApp);
+const numeroWhatsApp = numeroWhatsAppParaDepartamento(departamento, configWhatsApp);
+
+const total = productos.length;
+const urlDepartamento = `/catalogo/${departamento}/`;
+const urlCategoria = `https://hgstoremx.com/catalogo/${departamento}/${slugCategoria}/`;
+
+const productoConFoto = productos.find((p: any) => p.imagenPrincipal);
+const imagenCategoria = productoConFoto
+  ? urlFor(productoConFoto.imagenPrincipal).width(1200).height(630).fit('crop').auto('format').url()
+  : undefined;
+
+const datosBreadcrumb = {
+  '@context': 'https://schema.org/',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Inicio',
+      item: 'https://hgstoremx.com/',
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: nombreDepartamentoTexto,
+      item: `https://hgstoremx.com/catalogo/${departamento}/`,
+    },
+    {
+      '@type': 'ListItem',
+      position: 3,
+      name: tituloCategoria,
+      item: urlCategoria,
+    },
+  ],
+};
+
+const datosItemList = {
+  '@context': 'https://schema.org/',
+  '@type': 'ItemList',
+  itemListElement: productos.map((p: any, indice: number) => ({
+    '@type': 'ListItem',
+    position: indice + 1,
+    url: `https://hgstoremx.com/productos/${p.slug}/`,
+  })),
+};
+---
+<Layout titulo={tituloPagina} descripcion={descripcionMeta} imagen={imagenCategoria}>
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(datosBreadcrumb)} />
+    <script type="application/ld+json" set:html={JSON.stringify(datosItemList)} />
+  </Fragment>
+
+  <MenuHamburguesa departamentos={todosDepartamentos} configWhatsApp={configWhatsApp}>
+    <BotonCarrito slot="carrito" />
+  </MenuHamburguesa>
+  <PanelCarrito numeroDefault={configWhatsApp.numeroDefault} />
+
+  <nav aria-label="Ruta de navegación" class="flex items-center gap-1.5 px-6 py-2 text-sm border-b border-neutral-100">
+    <a href="/" class="text-neutral-500 hover:text-neutral-900">Inicio</a>
+    <span class="text-neutral-300" aria-hidden="true">&rsaquo;</span>
+    <a href={urlDepartamento} class="text-neutral-500 hover:text-neutral-900">{nombreDepartamentoTexto}</a>
+    <span class="text-neutral-300" aria-hidden="true">&rsaquo;</span>
+    <span class="font-medium text-neutral-900">{tituloCategoria}</span>
+  </nav>
+
+  <section class="px-6 pt-8 pb-2 text-center max-w-2xl mx-auto">
+    <h1 class="text-3xl font-semibold tracking-tight text-neutral-900">{tituloCategoria}</h1>
+    <p class="mt-3 text-base leading-relaxed text-neutral-600">
+      {parrafoEntrada} Parte de <a href={urlDepartamento} class="underline decoration-neutral-300 hover:text-neutral-900">{nombreDepartamentoTexto}</a> en HG Store MX.
+    </p>
+  </section>
+
+  {hermanas.length > 0 && (
+    <section class="px-6 pt-5 max-w-2xl mx-auto">
+      <h2 class="text-sm font-semibold text-neutral-900 text-center">También en {nombreDepartamentoTexto}</h2>
+      <div class="mt-3 flex flex-wrap justify-center gap-2">
+        {hermanas.map((hermana: any) => (
+          <a
+            href={`/catalogo/${departamento}/${hermana.slug}/`}
+            class="rounded-full border border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 hover:border-neutral-400 hover:text-neutral-900 transition-colors"
+          >
+            {hermana.titulo} <span class="text-neutral-400">({hermana.total})</span>
+          </a>
+        ))}
+        <a
+          href={urlDepartamento}
+          class="rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 transition-colors"
+        >
+          Ver todo {nombreDepartamentoTexto}
+        </a>
+      </div>
+    </section>
+  )}
+
+  <p class="px-6 pt-6 max-w-2xl mx-auto text-center text-base leading-relaxed text-neutral-600">
+    Para pedir cualquier producto, agrégalo al carrito y envía tu lista por WhatsApp. El pago y la entrega se acuerdan ahí; en ningún momento se te solicitará ningún pago en este sitio.
+  </p>
+
+  <main
+    class="px-6 pt-8 pb-20 max-w-5xl mx-auto"
+    data-tanda={TANDA_VER_MAS}
+    data-total={total}
+    data-visibles={LIMITE_INICIAL}
+  >
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
+      {productos.map((producto: any, index: number) => (
+        <div
+          class="producto-item"
+          data-indice={index}
+          style={index >= LIMITE_INICIAL ? 'display: none;' : ''}
+        >
+          <ProductCard
+            slug={producto.slug}
+            titulo={producto.titulo}
+            precio={producto.precio}
+            imagenPrincipal={producto.imagenPrincipal}
+            descripcion={producto.descripcion}
+            altTexto={producto.altTexto}
+            edicion={producto.edicion}
+            numeroWhatsApp={numeroWhatsApp}
+            agotado={producto.agotado}
+          />
+        </div>
+      ))}
+    </div>
+
+    {total > LIMITE_INICIAL && (
+      <div class="mt-8 flex flex-col items-center gap-2">
+        <button
+          type="button"
+          id="boton-ver-mas"
+          class="w-full sm:w-auto rounded-full bg-neutral-100 px-8 py-3.5 text-base font-semibold text-neutral-900 hover:bg-neutral-200 active:bg-neutral-300 transition"
+        >
+          Ver {Math.min(TANDA_VER_MAS, total - LIMITE_INICIAL)} más
+        </button>
+        <p id="texto-contador" class="text-sm text-neutral-400">
+          Mostrando {LIMITE_INICIAL} de {total}
+        </p>
+      </div>
+    )}
+
+    {total === 0 && (
+      <p class="text-center text-neutral-400">Todavía no hay productos en esta categoría.</p>
+    )}
+  </main>
+
+  <Footer departamentos={todosDepartamentos} configWhatsApp={configWhatsApp} />
+</Layout>
+
+<script>
+  // Todos los productos ya vienen en el HTML (buenos para Google); el botón solo
+  // va revelando tandas, para que la primera pantalla no cargue 51 fotos.
+  const contenedor = document.querySelector<HTMLElement>('main[data-tanda]');
+  const boton = document.getElementById('boton-ver-mas');
+  const contador = document.getElementById('texto-contador');
+
+  if (contenedor && boton) {
+    const tanda = Number(contenedor.dataset.tanda) || 24;
+    const total = Number(contenedor.dataset.total) || 0;
+    let visibles = Number(contenedor.dataset.visibles) || 0;
+    const items = Array.from(contenedor.querySelectorAll<HTMLElement>('.producto-item'));
+
+    boton.addEventListener('click', () => {
+      visibles = Math.min(visibles + tanda, total);
+
+      items.forEach((item) => {
+        if (Number(item.dataset.indice || '0') < visibles) item.style.display = '';
+      });
+
+      if (contador) contador.textContent = `Mostrando ${visibles} de ${total}`;
+
+      if (visibles >= total) {
+        boton.style.display = 'none';
+        if (contador) contador.style.display = 'none';
+      } else {
+        boton.textContent = `Ver ${Math.min(tanda, total - visibles)} más`;
+      }
+    });
+  }
+</script>

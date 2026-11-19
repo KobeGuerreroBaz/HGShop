@@ -7,6 +7,7 @@ import BotonCarrito from '../../components/BotonCarrito.astro';
 import PanelCarrito from '../../components/PanelCarrito.astro';
 import ProductCard from '../../components/ProductCard.astro';
 import { prepararTexto } from '../../lib/buscador';
+import { normalizarParaComparar, esRedundante, tienePaginaPropia, slugDeCategoria } from '../../lib/categorias';
 
 export async function getStaticPaths() {
   const departamentos = await sanityClient.fetch(`
@@ -35,7 +36,8 @@ const productos = await sanityClient.fetch(
     edicion,
     palabrasClave,
     agotado,
-    "categoriaTitulo": categoria->titulo
+    "categoriaTitulo": categoria->titulo,
+    "categoriaSlug": categoria->slug.current
   }`,
   { departamento }
 );
@@ -55,19 +57,9 @@ const LIMITE_INICIAL = 4;
 const TANDA_VER_MAS = 24;
 const nombreDepartamentoTexto = nombreDepartamento(departamento, configWhatsApp);
 
-function quitarAcentos(texto: string): string {
-  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-function normalizarParaComparar(texto: string): string {
-  let t = quitarAcentos(texto.toLowerCase().trim());
-  if (t.endsWith('s') && t.length > 3) t = t.slice(0, -1);
-  return t;
-}
-
-function esRedundante(categoria: string, departamentoTexto: string): boolean {
-  return normalizarParaComparar(categoria) === normalizarParaComparar(departamentoTexto);
-}
+// quitarAcentos, normalizarParaComparar y esRedundante se mudaron a
+// src/lib/categorias.ts, para que esta página y la de subdepartamento
+// (catalogo/[departamento]/[categoria].astro) usen exactamente la misma regla.
 
 function generarDescripcionDepartamento(
   nombreDepto: string,
@@ -126,12 +118,54 @@ const categoriasConConteo = categorias.map((titulo) => ({
   total: porCategoria[titulo].length,
 }));
 
+// Qué subdepartamentos tienen página propia. La regla vive en
+// src/lib/categorias.ts y es LA MISMA que usa [departamento]/[categoria].astro
+// para generarlas, así que esta página nunca enlaza una página que no existe.
+const slugPorCategoria: Record<string, string> = {};
+for (const producto of productos) {
+  const cat = producto.categoriaTitulo || 'Sin categoría';
+  if (!slugPorCategoria[cat] && producto.categoriaSlug) {
+    slugPorCategoria[cat] = slugDeCategoria(producto.categoriaSlug);
+  }
+}
+
+function subpaginaDe(titulo: string): string | null {
+  const slug = slugPorCategoria[titulo];
+  const tiene = tienePaginaPropia({
+    titulo,
+    slug,
+    totalCategoria: porCategoria[titulo]?.length || 0,
+    totalDepartamento: productos.length,
+    nombreDepartamento: nombreDepartamentoTexto,
+  });
+  return tiene ? `/catalogo/${departamento}/${slug}/` : null;
+}
+
 const descripcionDepartamento = generarDescripcionDepartamento(nombreDepartamentoTexto, categoriasConConteo);
 
 const productoDestacadoDepto = productos.find((p: any) => p.imagenPrincipal);
 const imagenDepartamento = productoDestacadoDepto
   ? urlFor(productoDestacadoDepto.imagenPrincipal).width(1200).height(630).fit('crop').auto('format').url()
   : undefined;
+
+const datosBreadcrumb = {
+  '@context': 'https://schema.org/',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Inicio',
+      item: 'https://hgstoremx.com/',
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: nombreDepartamentoTexto,
+      item: `https://hgstoremx.com/catalogo/${departamento}/`,
+    },
+  ],
+};
 
 const productosEnOrden = categorias.flatMap((cat) => porCategoria[cat]);
 const datosItemList = {
@@ -146,6 +180,7 @@ const datosItemList = {
 ---
 <Layout titulo={`${nombreDepartamentoTexto} - HG Store MX`} descripcion={descripcionDepartamento} imagen={imagenDepartamento}>
   <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(datosBreadcrumb)} />
     <script type="application/ld+json" set:html={JSON.stringify(datosItemList)} />
   </Fragment>
 
@@ -240,6 +275,7 @@ const datosItemList = {
     {categorias.map((cat) => {
       const productosDeCategoria = porCategoria[cat];
       const hayExtras = productosDeCategoria.length > LIMITE_INICIAL;
+      const urlSubpagina = subpaginaDe(cat);
       return (
         <div
           class="categoria-contenedor"
@@ -249,7 +285,23 @@ const datosItemList = {
           data-visibles={LIMITE_INICIAL}
           style="scroll-margin-top: 190px;"
         >
-          <h3 class="text-lg font-semibold text-neutral-900 mb-4 pb-2 border-b-2 border-neutral-900 inline-block pr-6">{cat}</h3>
+          <div class="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h2 class="text-lg font-semibold text-neutral-900 pb-2 border-b-2 border-neutral-900 inline-block pr-6">
+              {urlSubpagina ? (
+                <a href={urlSubpagina} class="hover:text-neutral-600 transition-colors">{cat}</a>
+              ) : (
+                cat
+              )}
+            </h2>
+            {urlSubpagina && (
+              <a
+                href={urlSubpagina}
+                class="text-sm font-medium text-neutral-500 underline decoration-neutral-300 hover:text-neutral-900"
+              >
+                Ver los {productosDeCategoria.length}
+              </a>
+            )}
+          </div>
           <div class="grid-categoria grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8">
             {productosDeCategoria.map((producto: any, index: number) => (
               <div
