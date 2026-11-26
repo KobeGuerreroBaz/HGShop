@@ -909,14 +909,21 @@ import Layout from '../layouts/Layout.astro';
     mostrarEstadoFoto('Foto quitada de la galería ✓', 'ok');
   }
 
-  async function subirFoto(archivo: File, modo: 'principal' | 'agregar-galeria') {
-    if (!productoActual) return;
+  type ResultadoSubida = { estado: 'ok' | 'error' | 'cancelado'; error?: string };
+
+  // `etiqueta` es el prefijo del mensaje cuando se suben varias ("Foto 3 de 6: ").
+  async function subirFoto(
+    archivo: File,
+    modo: 'principal' | 'agregar-galeria',
+    etiqueta = ''
+  ): Promise<ResultadoSubida> {
+    if (!productoActual) return { estado: 'error', error: 'No hay ningún producto abierto' };
     const producto = productoActual;
     let hash = '';
 
     try {
       if (modo === 'principal') {
-        mostrarEstadoFoto('Revisando si esa foto ya está en otro producto...', 'info');
+        mostrarEstadoFoto(`${etiqueta}Revisando si esa foto ya está en otro producto...`, 'info');
         hash = await calcularHash(archivo);
         const respuestaHash = await fetch('/api/verificar-hash', {
           method: 'POST',
@@ -929,12 +936,12 @@ import Layout from '../layouts/Layout.astro';
         if (resultadoHash.existe && dueno && dueno._id !== producto._id) {
           if (!confirm(`Esa foto ya es la de "${dueno.titulo}". ¿La pongo igual en este producto?`)) {
             mostrarEstadoFoto('Cambio cancelado.', 'info');
-            return;
+            return { estado: 'cancelado' };
           }
         }
       }
 
-      mostrarEstadoFoto('Comprimiendo y subiendo la foto...', 'info');
+      mostrarEstadoFoto(`${etiqueta}Comprimiendo y subiendo la foto...`, 'info');
       const comprimida = await comprimirImagen(archivo, 1600, 0.85);
 
       const formData = new FormData();
@@ -960,10 +967,11 @@ import Layout from '../layouts/Layout.astro';
       } = await respuesta.json();
 
       if (!resultado.ok) {
-        mostrarEstadoFoto(`No se pudo: ${resultado.error}`, 'error');
-        return;
+        mostrarEstadoFoto(`${etiqueta}No se pudo: ${resultado.error}`, 'error');
+        return { estado: 'error', error: resultado.error };
       }
-      if (productoActual !== producto) return; // se abrió otro producto mientras subía
+      // La foto ya se guardó; si mientras subía se abrió otro producto, solo no se repinta.
+      if (productoActual !== producto) return { estado: 'ok' };
 
       producto.galeria = resultado.galeria || [];
       renderizarGaleria(producto.galeria);
@@ -974,10 +982,12 @@ import Layout from '../layouts/Layout.astro';
         const nota = resultado.seGuardoVieja ? ' La anterior quedó en la galería.' : '';
         mostrarEstadoFoto(`Foto cambiada ✓${nota} Se ve en el sitio después del deploy.`, 'ok');
       } else {
-        mostrarEstadoFoto('Foto agregada a la galería ✓ Se ve en el sitio después del deploy.', 'ok');
+        mostrarEstadoFoto(`${etiqueta}Foto agregada a la galería ✓`, 'ok');
       }
+      return { estado: 'ok' };
     } catch (error: any) {
-      mostrarEstadoFoto(`No se pudo: ${error.message}`, 'error');
+      mostrarEstadoFoto(`${etiqueta}No se pudo: ${error.message}`, 'error');
+      return { estado: 'error', error: error.message };
     }
   }
 
@@ -989,10 +999,36 @@ import Layout from '../layouts/Layout.astro';
 
   inputFotoGaleria.addEventListener('change', async () => {
     const archivos = Array.from(inputFotoGaleria.files || []);
-    inputFotoGaleria.value = '';
-    for (const archivo of archivos) {
-      await subirFoto(archivo, 'agregar-galeria');
+    inputFotoGaleria.value = ''; // para poder volver a elegir las mismas fotos
+    if (archivos.length === 0 || !productoActual) return;
+
+    if (archivos.length === 1) {
+      const resultado = await subirFoto(archivos[0], 'agregar-galeria');
+      if (resultado.estado === 'ok') {
+        mostrarEstadoFoto('Foto agregada a la galería ✓ Se ve en el sitio después del deploy.', 'ok');
+      }
+      return;
     }
+
+    // Varias de un jalón: una por una, con contador, y al final un resumen —
+    // si no, el aviso de la que falló se pierde debajo de la siguiente.
+    const producto = productoActual;
+    let agregadas = 0;
+    const fallos: string[] = [];
+
+    for (let i = 0; i < archivos.length; i++) {
+      if (productoActual !== producto) break; // se abrió otro producto: no le sigo
+      const resultado = await subirFoto(archivos[i], 'agregar-galeria', `Foto ${i + 1} de ${archivos.length}: `);
+      if (resultado.estado === 'ok') agregadas += 1;
+      else if (resultado.error) fallos.push(resultado.error);
+    }
+
+    const partes = [`${agregadas} agregada${agregadas === 1 ? '' : 's'} a la galería`];
+    if (fallos.length > 0) {
+      const motivos = Array.from(new Set(fallos)).join('; ');
+      partes.push(`${fallos.length} ${fallos.length === 1 ? 'no entró' : 'no entraron'} (${motivos})`);
+    }
+    mostrarEstadoFoto(`${partes.join(' · ')}. Se ve en el sitio después del deploy.`, fallos.length > 0 ? 'error' : 'ok');
   });
 
   async function guardarProducto() {

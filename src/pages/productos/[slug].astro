@@ -1,5 +1,6 @@
 ---
 import { sanityClient, urlFor, obtenerConfiguracionWhatsApp, numeroWhatsAppParaDepartamento, nombreDepartamento } from '../../lib/sanity';
+import { esRedundante, slugDeCategoria, tienePaginaPropia } from '../../lib/categorias';
 import Layout from '../../layouts/Layout.astro';
 import MenuHamburguesa from '../../components/MenuHamburguesa.astro';
 import Footer from '../../components/Footer.astro';
@@ -32,6 +33,7 @@ export async function getStaticPaths() {
         cantidadDisponible,
         agotado,
         "categoriaTitulo": categoria->titulo,
+        "categoriaSlug": categoria->slug.current,
         "categoriaDepartamento": categoria->departamento
       }
     `),
@@ -102,14 +104,77 @@ export async function getStaticPaths() {
     }));
   }
 
+  // ---- El subdepartamento en la ruta de navegación ----
+  // Se enlaza SOLO si de verdad tiene página propia, con la misma regla que usa
+  // catalogo/[departamento]/[categoria].astro para generarlas (lib/categorias.ts).
+  // Si la regla viviera aparte aquí, el día que cambie el mínimo estas fichas
+  // enlazarían a páginas que no existen: 404 desde todas las fichas de golpe.
+  // Se cuenta sobre `productos` (sin quitar los de slug repetido) porque así los
+  // cuenta la página de subdepartamento, y los dos lados tienen que dar igual.
+  const totalPorCategoria = new Map<string, number>();
+  const totalPorDepartamento = new Map<string, number>();
+  const datosDeCategoria = new Map<string, { titulo: string; slug: string; departamento: string }>();
+
+  for (const p of productos as any[]) {
+    if (!p.categoriaId) continue;
+    totalPorCategoria.set(p.categoriaId, (totalPorCategoria.get(p.categoriaId) || 0) + 1);
+    const depto = p.categoriaDepartamento || '';
+    totalPorDepartamento.set(depto, (totalPorDepartamento.get(depto) || 0) + 1);
+    if (!datosDeCategoria.has(p.categoriaId)) {
+      datosDeCategoria.set(p.categoriaId, {
+        titulo: p.categoriaTitulo || '',
+        slug: slugDeCategoria(p.categoriaSlug),
+        departamento: depto,
+      });
+    }
+  }
+
+  // Si dos categorías del mismo departamento comparten slug, solo una acaba con
+  // página y desde aquí no se sabe cuál: ninguna se enlaza, se quedan en texto.
+  const vecesPorRuta = new Map<string, number>();
+  for (const cat of datosDeCategoria.values()) {
+    if (!cat.slug) continue;
+    const ruta = `${cat.departamento}/${cat.slug}`;
+    vecesPorRuta.set(ruta, (vecesPorRuta.get(ruta) || 0) + 1);
+  }
+
+  const enlacePorCategoria = new Map<string, string>();
+  for (const [id, cat] of datosDeCategoria) {
+    const rutaUnica = cat.slug && (vecesPorRuta.get(`${cat.departamento}/${cat.slug}`) || 0) === 1;
+    const llevaPagina =
+      rutaUnica &&
+      tienePaginaPropia({
+        titulo: cat.titulo,
+        slug: cat.slug,
+        totalCategoria: totalPorCategoria.get(id) || 0,
+        totalDepartamento: totalPorDepartamento.get(cat.departamento) || 0,
+        nombreDepartamento: nombreDepartamento(cat.departamento, configWhatsApp),
+      });
+    if (llevaPagina) enlacePorCategoria.set(id, `/catalogo/${cat.departamento}/${cat.slug}/`);
+  }
+
+  function rutaCategoriaDe(producto: any): { titulo: string; href: string | null } | null {
+    const titulo = producto.categoriaTitulo;
+    if (!titulo) return null;
+    // "Hot Wheels" dentro del departamento Hot Wheels se leería repetido.
+    if (esRedundante(titulo, nombreDepartamento(producto.categoriaDepartamento, configWhatsApp))) return null;
+    return { titulo, href: enlacePorCategoria.get(producto.categoriaId) || null };
+  }
+
   return productosUnicos.map((producto: any) => ({
     params: { slug: producto.slug },
-    props: { producto, configWhatsApp, todosDepartamentos, relacionados: relacionadosDe(producto) },
+    props: {
+      producto,
+      configWhatsApp,
+      todosDepartamentos,
+      relacionados: relacionadosDe(producto),
+      rutaCategoria: rutaCategoriaDe(producto),
+    },
   }));
 }
 
 const { slug } = Astro.params;
-const { producto, configWhatsApp, todosDepartamentos, relacionados } = Astro.props as any;
+const { producto, configWhatsApp, todosDepartamentos, relacionados, rutaCategoria } = Astro.props as any;
 
 const textoAlt = producto.altTexto || producto.titulo;
 
@@ -178,29 +243,44 @@ const datosEstructurados = {
     : {}),
 };
 
+// Google pide URL en cada escalón menos el último, así que el subdepartamento
+// solo entra en los datos estructurados cuando tiene página propia. Si todavía
+// no la tiene, se ve en la ruta de la página pero no en el schema.
+const escalones: Array<Record<string, unknown>> = [
+  {
+    '@type': 'ListItem',
+    position: 1,
+    name: 'Inicio',
+    item: 'https://hgstoremx.com/',
+  },
+  {
+    '@type': 'ListItem',
+    position: 2,
+    name: nombreDepartamentoTexto,
+    item: `https://hgstoremx.com/catalogo/${producto.categoriaDepartamento}/`,
+  },
+];
+
+if (rutaCategoria?.href) {
+  escalones.push({
+    '@type': 'ListItem',
+    position: escalones.length + 1,
+    name: rutaCategoria.titulo,
+    item: `https://hgstoremx.com${rutaCategoria.href}`,
+  });
+}
+
+escalones.push({
+  '@type': 'ListItem',
+  position: escalones.length + 1,
+  name: producto.titulo,
+  item: linkProducto,
+});
+
 const datosBreadcrumb = {
   '@context': 'https://schema.org/',
   '@type': 'BreadcrumbList',
-  itemListElement: [
-    {
-      '@type': 'ListItem',
-      position: 1,
-      name: 'Inicio',
-      item: 'https://hgstoremx.com/',
-    },
-    {
-      '@type': 'ListItem',
-      position: 2,
-      name: nombreDepartamentoTexto,
-      item: `https://hgstoremx.com/catalogo/${producto.categoriaDepartamento}/`,
-    },
-    {
-      '@type': 'ListItem',
-      position: 3,
-      name: producto.titulo,
-      item: linkProducto,
-    },
-  ],
+  itemListElement: escalones,
 };
 ---
 <Layout
@@ -224,6 +304,21 @@ const datosBreadcrumb = {
     <a id="enlace-volver" href={linkVolverRespaldo} data-departamento={nombreDepartamentoTexto} class="shrink-0 text-neutral-500 hover:text-neutral-900">
       {nombreDepartamentoTexto}
     </a>
+    {rutaCategoria && (
+      <>
+        <span class="shrink-0 text-neutral-300" aria-hidden="true">&rsaquo;</span>
+        {rutaCategoria.href ? (
+          <a
+            href={rutaCategoria.href}
+            class="shrink-0 max-w-28 sm:max-w-none truncate text-neutral-500 hover:text-neutral-900"
+          >
+            {rutaCategoria.titulo}
+          </a>
+        ) : (
+          <span class="shrink-0 max-w-28 sm:max-w-none truncate text-neutral-500">{rutaCategoria.titulo}</span>
+        )}
+      </>
+    )}
     <span class="shrink-0 text-neutral-300" aria-hidden="true">&rsaquo;</span>
     <span class="font-medium text-neutral-900 truncate">{producto.titulo}</span>
   </nav>
@@ -396,13 +491,37 @@ const datosBreadcrumb = {
       class="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-2xl leading-none"
     >&rsaquo;</button>
 
-    <div id="lightbox-contenido" class="relative w-full h-full flex items-center justify-center px-4 py-16 pointer-events-none">
-      <img id="lightbox-imagen" src="" alt={textoAlt} class="max-w-full max-h-full object-contain pointer-events-auto select-none" />
+    <div
+      id="lightbox-carril"
+      class="relative w-full h-full flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory overscroll-x-contain"
+    >
+      {todasLasFotos.map((foto) => (
+        <div class="snap-center shrink-0 w-full h-full flex items-center justify-center px-4 py-16">
+          <img
+            src={foto.completa}
+            alt={textoAlt}
+            loading="lazy"
+            decoding="async"
+            class="max-w-full max-h-full object-contain select-none"
+          />
+        </div>
+      ))}
     </div>
   </div>
 
   <Footer departamentos={todosDepartamentos} configWhatsApp={configWhatsApp} />
 </Layout>
+
+<style>
+  /* El carril se arrastra con el dedo; la barra de scroll solo estorbaría encima de la foto. */
+  #lightbox-carril {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  #lightbox-carril::-webkit-scrollbar {
+    display: none;
+  }
+</style>
 
 <script>
   import {
@@ -547,43 +666,62 @@ const datosBreadcrumb = {
   // Lightbox: click en la imagen principal o en cualquier miniatura la abre;
   // dentro se puede navegar entre todas las fotos del producto sin cerrarla.
   const lightbox = document.getElementById('lightbox');
-  const lightboxImagen = document.getElementById('lightbox-imagen') as HTMLImageElement | null;
+  const lightboxCarril = document.getElementById('lightbox-carril') as HTMLElement | null;
   const lightboxOverlay = document.getElementById('lightbox-overlay');
   const lightboxCerrar = document.getElementById('lightbox-cerrar');
   const lightboxAnterior = document.getElementById('lightbox-anterior') as HTMLButtonElement | null;
   const lightboxSiguiente = document.getElementById('lightbox-siguiente') as HTMLButtonElement | null;
 
-  function actualizarLightbox() {
-    if (!lightboxImagen) return;
-    lightboxImagen.src = fotos[indiceActual];
-
+  function actualizarFlechas() {
     const hayVarias = fotos.length > 1;
     lightboxAnterior?.classList.toggle('hidden', !hayVarias);
     lightboxSiguiente?.classList.toggle('hidden', !hayVarias);
+    // En los extremos la flecha se atenúa en vez de dar la vuelta: el carril
+    // ya rebota al llegar al final, y un salto de la última a la primera
+    // animaría el scroll por encima de todas las fotos.
+    lightboxAnterior?.classList.toggle('opacity-30', indiceActual <= 0);
+    lightboxSiguiente?.classList.toggle('opacity-30', indiceActual >= fotos.length - 1);
+  }
+
+  function limitarIndice(indice: number): number {
+    return Math.min(Math.max(indice, 0), Math.max(fotos.length - 1, 0));
+  }
+
+  function irAFoto(indice: number, suave = true) {
+    if (!lightboxCarril) return;
+    indiceActual = limitarIndice(indice);
+    lightboxCarril.scrollTo({
+      left: indiceActual * lightboxCarril.clientWidth,
+      behavior: suave ? 'smooth' : 'auto',
+    });
+    actualizarFlechas();
   }
 
   function abrirLightbox(indice: number) {
     if (!lightbox || fotos.length === 0) return;
-    indiceActual = indice;
-    actualizarLightbox();
+    indiceActual = limitarIndice(indice);
     lightbox.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    // Hasta aquí el visor estaba en display:none y clientWidth medía 0;
+    // ya visible, se coloca en la foto correcta sin animación.
+    if (lightboxCarril) lightboxCarril.scrollLeft = indiceActual * lightboxCarril.clientWidth;
+    actualizarFlechas();
   }
 
   function cerrarLightbox() {
     if (!lightbox) return;
     lightbox.classList.add('hidden');
     document.body.style.overflow = '';
+    // La foto grande de la ficha se queda en la que estabas viendo.
+    if (imagenPrincipal && fotos[indiceActual]) imagenPrincipal.src = fotos[indiceActual];
   }
 
   function fotoAnterior() {
-    indiceActual = (indiceActual - 1 + fotos.length) % fotos.length;
-    actualizarLightbox();
+    irAFoto(indiceActual - 1);
   }
 
   function fotoSiguiente() {
-    indiceActual = (indiceActual + 1) % fotos.length;
-    actualizarLightbox();
+    irAFoto(indiceActual + 1);
   }
 
   lightboxOverlay?.addEventListener('click', cerrarLightbox);
@@ -598,35 +736,36 @@ const datosBreadcrumb = {
     if (evento.key === 'ArrowRight') fotoSiguiente();
   });
 
-  let inicioX = 0;
-  let inicioY = 0;
-  const UMBRAL_SWIPE = 50;
+  // El dedo arrastra el carril y el navegador hace la inercia y el enganche;
+  // aquí solo se escucha para saber en qué foto quedó y para no confundir un
+  // arrastre con un toque en el fondo.
+  let ultimoScroll = 0;
+  let temporizadorScroll: ReturnType<typeof setTimeout>;
 
-  lightbox?.addEventListener(
-    'touchstart',
-    (evento) => {
-      const toque = evento.touches[0];
-      inicioX = toque.clientX;
-      inicioY = toque.clientY;
+  lightboxCarril?.addEventListener(
+    'scroll',
+    () => {
+      ultimoScroll = Date.now();
+      clearTimeout(temporizadorScroll);
+      temporizadorScroll = setTimeout(() => {
+        if (!lightboxCarril || lightboxCarril.clientWidth === 0) return;
+        indiceActual = limitarIndice(Math.round(lightboxCarril.scrollLeft / lightboxCarril.clientWidth));
+        actualizarFlechas();
+      }, 80);
     },
     { passive: true }
   );
 
-  lightbox?.addEventListener(
-    'touchend',
-    (evento) => {
-      const toque = evento.changedTouches[0];
-      const deltaX = toque.clientX - inicioX;
-      const deltaY = toque.clientY - inicioY;
+  // Toque en el fondo (fuera de la foto) = cerrar, como antes con el overlay.
+  lightboxCarril?.addEventListener('click', (evento) => {
+    if (Date.now() - ultimoScroll < 300) return; // venía de un arrastre, no de un toque
+    if ((evento.target as HTMLElement | null)?.tagName === 'IMG') return;
+    cerrarLightbox();
+  });
 
-      if (Math.abs(deltaX) > UMBRAL_SWIPE && Math.abs(deltaX) > Math.abs(deltaY)) {
-        if (deltaX > 0) {
-          fotoAnterior();
-        } else {
-          fotoSiguiente();
-        }
-      }
-    },
-    { passive: true }
-  );
+  // Al girar el teléfono cambia el ancho del carril y el scroll deja de cuadrar.
+  window.addEventListener('resize', () => {
+    if (!lightbox || lightbox.classList.contains('hidden')) return;
+    irAFoto(indiceActual, false);
+  });
 </script>
