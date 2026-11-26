@@ -81,6 +81,29 @@ import Layout from '../layouts/Layout.astro';
       <div id="tarjeta" class="mt-3 border border-neutral-200 rounded-xl p-4">
         <img id="imagen-producto" class="w-full aspect-square object-contain rounded-lg bg-neutral-50" />
 
+        <div class="mt-2">
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block">
+              <input id="input-foto-principal" type="file" accept="image/*" class="hidden" />
+              <span class="block w-full border border-neutral-300 text-neutral-700 rounded-md py-2 text-sm font-medium text-center">
+                Cambiar foto
+              </span>
+            </label>
+            <label class="block">
+              <input id="input-foto-galeria" type="file" accept="image/*" multiple class="hidden" />
+              <span class="block w-full border border-neutral-300 text-neutral-700 rounded-md py-2 text-sm font-medium text-center">
+                + Foto a la galería
+              </span>
+            </label>
+          </div>
+          <label class="mt-2 flex items-start gap-2">
+            <input id="campo-conservar-vieja" type="checkbox" checked class="h-4 w-4 mt-0.5" />
+            <span class="text-xs text-neutral-600">Guardar la foto anterior en la galería (así no se pierde)</span>
+          </label>
+          <p id="estado-foto" class="hidden text-xs mt-2"></p>
+          <div id="miniaturas-galeria" class="mt-2 grid grid-cols-4 gap-2"></div>
+        </div>
+
         <h2 id="titulo-producto" class="text-lg font-semibold text-neutral-900 mt-3"></h2>
         <p id="categoria-producto" class="text-sm text-neutral-500"></p>
 
@@ -119,6 +142,11 @@ import Layout from '../layouts/Layout.astro';
           <div>
             <label class="text-xs text-neutral-500">Título (lo que ve el cliente)</label>
             <input id="campo-titulo" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500">Texto de la foto (SEO y accesibilidad)</label>
+            <input id="campo-alt" type="text" class="w-full border border-neutral-200 rounded-md px-3 py-2 text-sm" />
+            <p class="text-xs text-neutral-400 mt-1">Describe lo que se ve en la foto. Si le cambiaste la foto, aquí lo ajustas.</p>
           </div>
           <div class="border border-amber-200 bg-amber-50 rounded-md p-3">
             <div class="flex items-center gap-2">
@@ -188,7 +216,7 @@ import Layout from '../layouts/Layout.astro';
 </style>
 
 <script>
-  import type { DepartamentoConConteo, ProductoParaAdmin, MetadatosBusqueda, MetadatosProductoPedido, ResumenBusquedas } from '../lib/tipos';
+  import type { DepartamentoConConteo, FotoGaleria, ProductoParaAdmin, MetadatosBusqueda, MetadatosProductoPedido, ResumenBusquedas } from '../lib/tipos';
 
   const CLAVE_STORAGE = 'hgshop-upload-pin';
   let pinGuardado = localStorage.getItem(CLAVE_STORAGE) || '';
@@ -199,6 +227,12 @@ import Layout from '../layouts/Layout.astro';
   const pantallaBusqueda = document.getElementById('pantalla-busqueda') as HTMLElement;
   const pantallaProducto = document.getElementById('pantalla-producto') as HTMLElement;
   const campoTitulo = document.getElementById('campo-titulo') as HTMLInputElement;
+  const campoAlt = document.getElementById('campo-alt') as HTMLInputElement;
+  const inputFotoPrincipal = document.getElementById('input-foto-principal') as HTMLInputElement;
+  const inputFotoGaleria = document.getElementById('input-foto-galeria') as HTMLInputElement;
+  const campoConservarVieja = document.getElementById('campo-conservar-vieja') as HTMLInputElement;
+  const estadoFoto = document.getElementById('estado-foto') as HTMLElement;
+  const miniaturasGaleria = document.getElementById('miniaturas-galeria') as HTMLElement;
   const campoSlug = document.getElementById('campo-slug') as HTMLInputElement;
   const campoCambiarDireccion = document.getElementById('campo-cambiar-direccion') as HTMLInputElement;
   const vistaDireccion = document.getElementById('vista-direccion') as HTMLElement;
@@ -626,12 +660,16 @@ import Layout from '../layouts/Layout.astro';
     campoMarca.value = producto.marca || '';
     campoPalabras.value = (producto.palabrasClave || []).join(', ');
     campoTitulo.value = producto.titulo || '';
+    campoAlt.value = producto.altTexto || '';
     campoSlug.value = producto.slug || '';
     campoCambiarDireccion.checked = false;
     campoSlug.disabled = true;
     vistaDireccion.textContent = producto.slug ? `hgstoremx.com/productos/${producto.slug}/` : '';
     detallesOpcionales.classList.add('hidden');
     botonMostrarDetalles.textContent = '+ Agregar más detalles';
+    estadoFoto.classList.add('hidden');
+    campoConservarVieja.checked = true;
+    renderizarGaleria(producto.galeria || []);
 
     (tarjeta as any).dataset.productoId = producto._id;
 
@@ -786,6 +824,177 @@ import Layout from '../layouts/Layout.astro';
     }
   });
 
+  // ---- Fotos: cambiar la principal y administrar la galería ----
+  // Se comprime en el navegador antes de subir, igual que en /subir, para que
+  // suba rápido con datos del celular y no se gaste espacio con fotos de 5 MB.
+  async function comprimirImagen(archivo: File | Blob, maxDimension: number, calidad: number): Promise<Blob> {
+    const bitmap = await createImageBitmap(archivo);
+    let { width, height } = bitmap;
+
+    if (width > maxDimension || height > maxDimension) {
+      const factor = Math.min(maxDimension / width, maxDimension / height);
+      width = Math.round(width * factor);
+      height = Math.round(height * factor);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const contexto = canvas.getContext('2d');
+    contexto?.drawImage(bitmap, 0, 0, width, height);
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob as Blob), 'image/jpeg', calidad);
+    });
+  }
+
+  // El hash se calcula sobre la foto original (igual que en /subir) para que el
+  // detector de duplicados compare lo mismo en los dos lados.
+  async function calcularHash(archivo: File | Blob): Promise<string> {
+    const buffer = await archivo.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  function mostrarEstadoFoto(texto: string, tono: 'info' | 'error' | 'ok') {
+    estadoFoto.textContent = texto;
+    estadoFoto.classList.remove('hidden', 'text-neutral-500', 'text-red-600', 'text-green-600');
+    estadoFoto.classList.add(tono === 'error' ? 'text-red-600' : tono === 'ok' ? 'text-green-600' : 'text-neutral-500');
+  }
+
+  function renderizarGaleria(galeria: FotoGaleria[]) {
+    miniaturasGaleria.innerHTML = '';
+    galeria.forEach((foto) => {
+      const caja = document.createElement('div');
+      caja.className = 'relative';
+
+      const img = document.createElement('img');
+      img.src = foto.url;
+      img.className = 'w-full aspect-square object-contain rounded bg-neutral-50 border border-neutral-200';
+
+      const quitar = document.createElement('button');
+      quitar.type = 'button';
+      quitar.className = 'absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white border border-neutral-300 text-neutral-600 text-xs leading-none';
+      quitar.textContent = '✕';
+      quitar.addEventListener('click', () => quitarDeGaleria(foto.llave));
+
+      caja.append(img, quitar);
+      miniaturasGaleria.appendChild(caja);
+    });
+  }
+
+  async function quitarDeGaleria(llave: string) {
+    if (!productoActual) return;
+    const producto = productoActual;
+    if (!confirm('¿Quitar esta foto de la galería?')) return;
+
+    mostrarEstadoFoto('Quitando foto...', 'info');
+    const respuesta = await fetch('/api/cambiar-foto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headersConPin() },
+      body: JSON.stringify({ id: producto._id, llave }),
+    });
+    const resultado: { ok?: boolean; error?: string; galeria?: FotoGaleria[] } = await respuesta.json();
+
+    if (!resultado.ok) {
+      mostrarEstadoFoto(`No se pudo quitar: ${resultado.error}`, 'error');
+      return;
+    }
+    if (productoActual !== producto) return; // ya se abrió otro producto
+
+    producto.galeria = resultado.galeria || [];
+    renderizarGaleria(producto.galeria);
+    mostrarEstadoFoto('Foto quitada de la galería ✓', 'ok');
+  }
+
+  async function subirFoto(archivo: File, modo: 'principal' | 'agregar-galeria') {
+    if (!productoActual) return;
+    const producto = productoActual;
+    let hash = '';
+
+    try {
+      if (modo === 'principal') {
+        mostrarEstadoFoto('Revisando si esa foto ya está en otro producto...', 'info');
+        hash = await calcularHash(archivo);
+        const respuestaHash = await fetch('/api/verificar-hash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headersConPin() },
+          body: JSON.stringify({ hash }),
+        });
+        const resultadoHash: { existe: boolean; producto: { _id: string; titulo: string } | null } =
+          await respuestaHash.json();
+        const dueno = resultadoHash.producto;
+        if (resultadoHash.existe && dueno && dueno._id !== producto._id) {
+          if (!confirm(`Esa foto ya es la de "${dueno.titulo}". ¿La pongo igual en este producto?`)) {
+            mostrarEstadoFoto('Cambio cancelado.', 'info');
+            return;
+          }
+        }
+      }
+
+      mostrarEstadoFoto('Comprimiendo y subiendo la foto...', 'info');
+      const comprimida = await comprimirImagen(archivo, 1600, 0.85);
+
+      const formData = new FormData();
+      formData.append('id', producto._id);
+      formData.append('modo', modo);
+      formData.append('foto', comprimida, 'foto.jpg');
+      if (modo === 'principal') {
+        formData.append('hash', hash);
+        formData.append('conservarVieja', campoConservarVieja.checked ? '1' : '0');
+      }
+
+      const respuesta = await fetch('/api/cambiar-foto', {
+        method: 'POST',
+        headers: headersConPin(),
+        body: formData,
+      });
+      const resultado: {
+        ok?: boolean;
+        error?: string;
+        imagenUrl?: string;
+        galeria?: FotoGaleria[];
+        seGuardoVieja?: boolean;
+      } = await respuesta.json();
+
+      if (!resultado.ok) {
+        mostrarEstadoFoto(`No se pudo: ${resultado.error}`, 'error');
+        return;
+      }
+      if (productoActual !== producto) return; // se abrió otro producto mientras subía
+
+      producto.galeria = resultado.galeria || [];
+      renderizarGaleria(producto.galeria);
+
+      if (modo === 'principal' && resultado.imagenUrl) {
+        producto.imagenUrl = resultado.imagenUrl;
+        imagenProducto.src = resultado.imagenUrl;
+        const nota = resultado.seGuardoVieja ? ' La anterior quedó en la galería.' : '';
+        mostrarEstadoFoto(`Foto cambiada ✓${nota} Se ve en el sitio después del deploy.`, 'ok');
+      } else {
+        mostrarEstadoFoto('Foto agregada a la galería ✓ Se ve en el sitio después del deploy.', 'ok');
+      }
+    } catch (error: any) {
+      mostrarEstadoFoto(`No se pudo: ${error.message}`, 'error');
+    }
+  }
+
+  inputFotoPrincipal.addEventListener('change', async () => {
+    const archivo = inputFotoPrincipal.files?.[0];
+    inputFotoPrincipal.value = ''; // para poder volver a elegir la misma foto
+    if (archivo) await subirFoto(archivo, 'principal');
+  });
+
+  inputFotoGaleria.addEventListener('change', async () => {
+    const archivos = Array.from(inputFotoGaleria.files || []);
+    inputFotoGaleria.value = '';
+    for (const archivo of archivos) {
+      await subirFoto(archivo, 'agregar-galeria');
+    }
+  });
+
   async function guardarProducto() {
     const productoId = (tarjeta as any).dataset.productoId;
     const palabrasClave = campoPalabras.value
@@ -809,6 +1018,7 @@ import Layout from '../layouts/Layout.astro';
         mostrarExistencias: campoExistencias.checked,
         agotado: campoAgotado.checked,
         titulo: campoTitulo.value,
+        altTexto: campoAlt.value,
         ...(campoCambiarDireccion.checked && campoSlug.value.trim() ? { slug: campoSlug.value } : {}),
       }),
     });

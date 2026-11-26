@@ -1,5 +1,21 @@
 import { createClient } from '@sanity/client';
 import { env } from 'cloudflare:workers';
+import type { FotoGaleria } from './tipos';
+
+/**
+ * Convierte el array `galeria` de Sanity en lo que necesita el panel: llave + url chica.
+ * Las fotos subidas por los scripts viejos pueden no traer `_key`; para esas se usa
+ * `idx-<posición>`, que cambiar-foto.ts entiende como "quita la foto en esa posición".
+ */
+export function galeriaParaPantalla(galeria: unknown, urlFor: (fuente: any) => any): FotoGaleria[] {
+  if (!Array.isArray(galeria)) return [];
+  return galeria
+    .filter((foto: any) => foto?.asset?._ref)
+    .map((foto: any, i: number) => ({
+      llave: foto._key || `idx-${i}`,
+      url: urlFor(foto).width(200).auto('format').url(),
+    }));
+}
 
 export function pinValido(request: Request): boolean {
   const pin = request.headers.get('x-upload-pin');

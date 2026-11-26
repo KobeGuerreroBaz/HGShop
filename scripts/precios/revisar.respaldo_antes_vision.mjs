@@ -1,0 +1,936 @@
+// Página "Carritos · Revisar precios": compara tus Hot Wheels, Matchbox y Cars contra la base de vendedores. SIN IA.
+//
+// Uso (desde la raíz del repo) o con la app "Precios Carritos" del Dock:
+//   node scripts/precios/revisar.mjs         (abre http://localhost:4400 en tu navegador)
+//   node scripts/precios/revisar.mjs --sin-abrir   (no abre el navegador; lo usa la app)
+//
+// Desde la página también se agregan álbumes: corre el scraper de ~/Desktop/scraper-hotwheels y, al terminar,
+// vuelve a armar la base sola. Desde el iPhone (misma red Wi-Fi) pide el mismo PIN que /subir (UPLOAD_PIN de .dev.vars).
+//
+// Qué escribe en Sanity: SOLO el campo "precio", y solo cuando le das "Guardar" a un producto.
+// Lo demás (coincidencias y fotos confirmadas o rechazadas, palabras aprendidas, productos saltados)
+// se guarda en scripts/salida/. Los precios nuevos se ven en el sitio después de tu deploy.
+
+import 'dotenv/config';
+import fs from 'fs';
+import http from 'http';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
+import { exec, spawn } from 'child_process';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { createClient } from '@sanity/client';
+import { crearBuscador, marcaCanonica, tokens, distintivas, numeroDe } from '../../src/lib/emparejar-precios.mjs';
+import { armarBase, leerAlbum, CARPETA_SCRAPER_DEFECTO, ARCHIVO_REVISION, claveFila, leerRevision, listarPorRevisar, limpiarUrlFacebook } from './armar-base.mjs';
+
+const PUERTO = 4400;
+const PRECIO_MINIMO_BASE = 30; // igual que armar-base: lo de este precio o menos no entra a la base
+const CARPETA_SCRAPER = process.env.CARPETA_SCRAPER || CARPETA_SCRAPER_DEFECTO;
+const ABRIR_NAVEGADOR = !process.argv.includes('--sin-abrir');
+const DEPARTAMENTOS = ['hot-wheels', 'cars', 'matchbox'];
+
+// Etiquetas de "cotizado" (se buscan en el título del producto). Agrega o quita a tu gusto.
+const COTIZADOS = [
+  ['Gulf', /\bgulf\b/i],
+  ['Skyline', /skyline|gt-?r\b|\br3[234]\b|kenmeri|hakosuka/i],
+  ['Nissan', /nissan|datsun/i],
+  ['Camioneta', /pick ?up|truck|camioneta|\bvan\b|bronco|f-?150|c-?10\b|\bram\b|tacoma|hilux|tundra|silverado|sierra|\bsuv\b|land cruiser|4x4/i],
+];
+
+const CARPETA = path.dirname(fileURLToPath(import.meta.url));
+const SALIDA = path.resolve('scripts/salida');
+const ARCHIVO_BASE = path.join(SALIDA, 'base-precios.json');
+const ARCHIVO_EQUIV = path.join(SALIDA, 'equivalencias.json');
+const ARCHIVO_ESTADO = path.join(SALIDA, 'revision-estado.json');
+
+for (const nombre of ['SANITY_PROJECT_ID', 'SANITY_API_TOKEN']) {
+  if (!process.env[nombre]) {
+    console.error(`Falta ${nombre} en .env (corre el script desde la raíz de hgshop)`);
+    process.exit(1);
+  }
+}
+if (!fs.existsSync(ARCHIVO_BASE)) {
+  console.log('No existe la base todavía: la armo ahora...');
+  armarBase({ carpetaScraper: CARPETA_SCRAPER, carpetaSalida: SALIDA });
+}
+
+// PIN para entrar desde otro aparato (iPhone): el mismo UPLOAD_PIN de .dev.vars (o PIN_PRECIOS en .env)
+function leerPin() {
+  if (process.env.PIN_PRECIOS) return String(process.env.PIN_PRECIOS).trim();
+  try {
+    const m = fs.readFileSync('.dev.vars', 'utf-8').match(/^\s*UPLOAD_PIN\s*=\s*"?([^"\n]+)"?/m);
+    return m ? m[1].trim() : '';
+  } catch {
+    return '';
+  }
+}
+const PIN = leerPin();
+// La cookie guarda una huella del PIN, no el PIN
+const HUELLA_PIN = PIN ? crypto.createHash('sha256').update('carritos:' + PIN).digest('hex').slice(0, 32) : '';
+
+const leerJson = (archivo, porDefecto) => {
+  try { return JSON.parse(fs.readFileSync(archivo, 'utf-8')); } catch { return porDefecto; }
+};
+const escribirJson = (archivo, datos) => fs.writeFileSync(archivo, JSON.stringify(datos, null, 1), 'utf-8');
+
+const client = createClient({
+  projectId: process.env.SANITY_PROJECT_ID,
+  dataset: 'production',
+  apiVersion: '2024-01-01',
+  token: process.env.SANITY_API_TOKEN,
+  useCdn: false,
+});
+
+// ---------- datos ----------
+let base = leerJson(ARCHIVO_BASE, { precios: [] }).precios;
+let buscador = crearBuscador(base);
+let versionBase = Date.now();
+let baseDesactualizada = false; // hay decisiones de "Por revisar" que aún no se aplican a la base
+
+/** Vuelve a armar la base (después de un álbum nuevo) y recarga el buscador sin reiniciar la página. */
+function recargarBase() {
+  const r = armarBase({ carpetaScraper: CARPETA_SCRAPER, carpetaSalida: SALIDA });
+  base = r.base;
+  buscador = crearBuscador(base);
+  versionBase = Date.now();
+  console.log(`  Base actualizada: ${base.length} precios de ${buscador.totalModelos} modelos`);
+  return r;
+}
+const equiv = leerJson(ARCHIVO_EQUIV, {});
+for (const k of ['confirmados', 'rechazados', 'fotosSi', 'fotosNo', 'fotosVersion', 'aprendidos']) equiv[k] ||= {};
+equiv.decisiones ||= [];
+const estado = leerJson(ARCHIVO_ESTADO, {});
+
+// Novedades: al guardar un precio se anota qué álbumes había; lo que salga de álbumes posteriores es "nuevo".
+const albumesActuales = () => [...new Set(base.map((a) => a.album).filter(Boolean))].sort();
+{
+  // Una sola vez: a los precios guardados antes de esto se les anotan los álbumes de hoy (para que no salgan todos como nuevos)
+  let migrados = 0;
+  for (const e of Object.values(estado)) if (e.estado === 'guardado' && !e.albumes) { e.albumes = albumesActuales(); migrados++; }
+  if (migrados) { escribirJson(ARCHIVO_ESTADO, estado); console.log(`  Novedades: anoté los álbumes actuales a ${migrados} precios ya guardados`); }
+}
+
+// Se leen al abrir la página y otra vez con el botón "🔄 Traer productos nuevos" (sin apagar la página)
+const CONSULTA_PRODUCTOS = `*[_type == "producto" && (
+      categoria->departamento in $deps ||
+      (categoria->departamento == "autos-a-escala" && (titulo match "matchbox" || marca match "matchbox"))
+    )]{
+    _id, _createdAt, titulo, precio, marca, edicion, cantidadDisponible, agotado,
+    "imagen": imagenPrincipal.asset->url,
+    "departamento": categoria->departamento,
+    "categoria": categoria->titulo
+  } | order(titulo asc)`;
+const leerProductos = () => client.fetch(CONSULTA_PRODUCTOS, { deps: DEPARTAMENTOS });
+
+console.log('Leyendo tus productos de Sanity...');
+let productos = await leerProductos();
+const porId = new Map();
+const conteo = {};
+/** Rehace el índice por id y el conteo por departamento (al abrir y al traer productos nuevos). */
+function indexarProductos() {
+  porId.clear();
+  for (const k of Object.keys(conteo)) delete conteo[k];
+  for (const p of productos) {
+    porId.set(p._id, p);
+    conteo[p.departamento] = (conteo[p.departamento] || 0) + 1;
+  }
+}
+indexarProductos();
+
+const claveAv = (a) => `${a.album}|${a.foto}|${a.posiciones}`;
+const textoProducto = (p) => `${p.titulo} ${p.edicion || ''}`;
+
+/** Prepara candidatos para el navegador: quita rutas locales y aplica tus decisiones por foto. */
+function preparar(candidatos, idProducto) {
+  const no = new Set(equiv.fotosNo[idProducto] || []);
+  const si = new Set(equiv.fotosSi[idProducto] || []);
+  const ver = new Set(equiv.fotosVersion[idProducto] || []); // mismo carrito, otro color o año
+  return candidatos
+    .map((c) => {
+      const av = c.avistamientos
+        .filter((a) => !no.has(claveAv(a)))
+        .map(({ archivoFoto, ...a }) => ({ ...a, clave: claveAv(a), tieneFoto: !!archivoFoto, fotoConfirmada: si.has(claveAv(a)), otraVersion: ver.has(claveAv(a)) }));
+      if (!av.length) return null;
+      const precios = av.map((a) => a.precio);
+      return {
+        ...c,
+        avistamientos: av,
+        min: Math.min(...precios),
+        max: Math.max(...precios),
+        veces: av.length,
+        vendedores: [...new Set(av.map((a) => a.vendedor))],
+        ocultas: c.avistamientos.length - av.length,
+      };
+    })
+    .filter(Boolean);
+}
+
+function candidatosDe(p) {
+  return preparar(
+    buscador.buscar(textoProducto(p), {
+      marca: marcaCanonica(p.titulo, p.marca || ''),
+      confirmados: equiv.confirmados[p._id] || [],
+      rechazados: equiv.rechazados[p._id] || [],
+      aprendidos: equiv.aprendidos,
+    }),
+    p._id
+  );
+}
+
+function paraNavegador(p) {
+  const texto = textoProducto(p);
+  const e = estado[p._id] || null;
+  let candidatos = candidatosDe(p);
+  if (e?.estado === 'guardado' && e.albumes) {
+    const conocidos = new Set(e.albumes);
+    candidatos = candidatos.map((c) => ({ ...c, avistamientos: c.avistamientos.map((a) => (a.album && !conocidos.has(a.album) ? { ...a, nuevo: true } : a)) }));
+  }
+  return {
+    ...p,
+    estado: e ? (({ albumes, ...resto }) => resto)(e) : null,
+    cotizado: COTIZADOS.filter(([, re]) => re.test(texto)).map(([nombre]) => nombre),
+    numero: numeroDe(texto),
+    candidatos,
+  };
+}
+
+// ---------- aprendizaje ----------
+function registrar(p, key, decision, score) {
+  equiv.decisiones.push({ fecha: new Date().toISOString(), id: p._id, titulo: p.titulo, modelo: key, decision, score: score ?? null });
+}
+
+/** Si al confirmar sobra exactamente una palabra de cada lado, se aprende que son equivalentes. */
+function aprender(p, key) {
+  const P = tokens(textoProducto(p));
+  for (const t of [...P]) if (equiv.aprendidos[t]) P.push(equiv.aprendidos[t]);
+  const G = key.split('|')[1]?.split(' ') || [];
+  const util = (t) => t.length >= 2 && !/^\d+$/.test(t);
+  const faltan = G.filter((t) => !P.includes(t) && util(t));
+  const sobran = distintivas(P.filter((t) => !G.includes(t))).filter(util);
+  if (faltan.length === 1 && sobran.length === 1 && !equiv.aprendidos[sobran[0]]) {
+    equiv.aprendidos[sobran[0]] = faltan[0];
+    console.log(`  Aprendido: "${sobran[0]}" = "${faltan[0]}"`);
+  }
+}
+
+function confirmarGrupo(id, key) {
+  const conf = new Set(equiv.confirmados[id] || []);
+  const rech = new Set(equiv.rechazados[id] || []);
+  conf.add(key);
+  rech.delete(key);
+  equiv.confirmados[id] = [...conf];
+  equiv.rechazados[id] = [...rech];
+}
+
+// ---------- álbumes (scraper) ----------
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const ARCHIVO_MAESTRO = path.join(CARPETA_SCRAPER, 'precios_maestro.json');
+const ARCHIVO_VENDEDORES = path.join(SALIDA, 'vendedores.json'); // vendedores dados de alta aunque aún no tengan álbum
+
+const slug = (t) =>
+  String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+/** Identificadores de un link de foto de Facebook: el del álbum ("set=pcb.…") y el de la foto ("fbid=…"). */
+function idsDeLink(link) {
+  const s = String(link || '');
+  return { set: (s.match(/[?&]set=([\w.]+)/) || [])[1] || '', fbid: (s.match(/[?&]fbid=(\d+)/) || [])[1] || '' };
+}
+/** Link (limpio) de la primera foto de un álbum ya procesado: lo guardó el scraper en debug/<album>_foto_001.json. */
+function linkDeAlbum(nombre) {
+  const d = leerJson(path.join(CARPETA_SCRAPER, 'debug', `${nombre}_foto_001.json`), {});
+  return limpiarUrlFacebook(d.url || null);
+}
+/**
+ * ¿Este link ya corresponde a un álbum procesado? Compara el id del álbum (o, si el link no lo trae, el de la foto)
+ * contra la primera foto de cada álbum guardado. Sirve aunque hayas escrito otra fecha u otro nombre de vendedor.
+ */
+function albumPorLink(link) {
+  const { set, fbid } = idsDeLink(link);
+  if (!set && !fbid) return null;
+  const maestro = leerJson(ARCHIVO_MAESTRO, { albumes: [], filas: [] });
+  const encontrado = (nombre) => {
+    const filas = (maestro.filas || []).filter((f) => f.album === nombre).length;
+    return { nombre, ...leerAlbum(nombre), filas };
+  };
+  for (const nombre of maestro.albumes || []) {
+    const ids = idsDeLink(linkDeAlbum(nombre));
+    if ((set && ids.set === set) || (fbid && ids.fbid === fbid)) return encontrado(nombre);
+  }
+  // Cualquier foto ya procesada (no solo la primera): sirve con links de álbum (set=a.…) y de publicación (set=pcb.…)
+  const porFoto = fbid ? fotosProcesadasFb().get(fbid) : null;
+  if (porFoto) return encontrado(porFoto);
+  // Link de álbum de Facebook: se busca ese álbum en las listas de listar_albumes.mjs y se comparan sus fotos
+  const idAlbum = (String(link).match(/[?&]set=a\.(\d+)/) || [])[1];
+  if (idAlbum) {
+    for (const vendedor of Object.keys(leerJson(ARCHIVO_VENDEDORES_FB, {}))) {
+      const a = (leerJson(path.join(CARPETA_ALBUMES_FB, `${slug(vendedor)}.json`), {}).albumes || []).find((x) => x.id === idAlbum);
+      const c = a ? coincidenciaFb(a.fotosIds, fotosProcesadasFb()) : null;
+      if (c) return encontrado(c);
+    }
+  }
+  return null;
+}
+
+/** Nombre libre para un álbum nuevo: "alain-rodriguez-oct25"; si ya existe (otro link), "…-2", luego "…-3", etc. */
+function nombreLibre(base) {
+  const usados = new Set(leerJson(ARCHIVO_MAESTRO, { albumes: [] }).albumes || []);
+  if (!usados.has(base)) return base;
+  let n = 2;
+  while (usados.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/** Álbumes ya procesados, agrupados por vendedor (más reciente primero). */
+function historialAlbumes() {
+  const maestro = leerJson(ARCHIVO_MAESTRO, { albumes: [], filas: [] });
+  const porAlbum = {};
+  const revision = leerRevision(SALIDA);
+  for (const f of maestro.filas || []) {
+    const a = (porAlbum[f.album] ||= { filas: 0, revisar: 0, conPrecio: 0 });
+    a.filas++;
+    // "por revisar" pendientes: sin decisión tuya y que no sean de $30 o menos (esas la base ya las ignora)
+    const bajo = typeof f.precioUnitario === 'number' && f.precioUnitario <= PRECIO_MINIMO_BASE;
+    if (f.revisar && !bajo && !revision[claveFila(f)]) a.revisar++;
+    if (typeof f.precioUnitario === 'number') a.conPrecio++;
+  }
+  // Datos extra de cada álbum: fotos leídas (archivos de debug), omitidos y link de Facebook de la primera foto
+  const fotosPorAlbum = {};
+  const procesadoPorAlbum = {}; // hora en que el scraper guardó por última vez una foto del álbum
+  try {
+    const carpetaDebug = path.join(CARPETA_SCRAPER, 'debug');
+    for (const n of fs.readdirSync(carpetaDebug)) {
+      const m = n.match(/^(.+)_foto_\d{3}\.json$/);
+      if (!m) continue;
+      fotosPorAlbum[m[1]] = (fotosPorAlbum[m[1]] || 0) + 1;
+      try {
+        const hora = fs.statSync(path.join(carpetaDebug, n)).mtimeMs;
+        if (hora > (procesadoPorAlbum[m[1]] || 0)) procesadoPorAlbum[m[1]] = hora;
+      } catch {}
+    }
+  } catch {}
+  const omitidosPorAlbum = {};
+  for (const o of maestro.omitidos || []) omitidosPorAlbum[o.album] = (omitidosPorAlbum[o.album] || 0) + 1;
+  const albumes = (maestro.albumes || []).map((nombre) => ({
+    nombre,
+    ...leerAlbum(nombre),
+    ...(porAlbum[nombre] || { filas: 0, revisar: 0 }),
+    fotos: fotosPorAlbum[nombre] || 0,
+    omitidos: omitidosPorAlbum[nombre] || 0,
+    url: linkDeAlbum(nombre),
+    procesadoEn: procesadoPorAlbum[nombre] ? new Date(procesadoPorAlbum[nombre]).toISOString() : null,
+  }));
+  const extra = leerJson(ARCHIVO_VENDEDORES, []);
+  const vendedores = [...new Set([...albumes.map((a) => a.vendedor), ...extra])].sort();
+  const grupos = vendedores.map((v) => ({
+    vendedor: v,
+    albumes: albumes.filter((a) => a.vendedor === v).sort((x, y) => String(y.fecha).localeCompare(String(x.fecha))),
+  }));
+  // Último álbum procesado de cada vendedor (el más reciente por hora de proceso, no por fecha del álbum)
+  const ultimos = grupos
+    .map((g) => {
+      const u = g.albumes.filter((a) => a.procesadoEn).sort((x, y) => y.procesadoEn.localeCompare(x.procesadoEn))[0];
+      if (!u) return null;
+      u.ultimo = true;
+      return { vendedor: g.vendedor, nombre: u.nombre, fecha: u.fecha, numero: u.numero, procesadoEn: u.procesadoEn, url: u.url, filas: u.filas };
+    })
+    .filter(Boolean)
+    .sort((x, y) => y.procesadoEn.localeCompare(x.procesadoEn));
+  return { grupos, vendedores, nombres: albumes.map((a) => a.nombre), ultimos };
+}
+
+// ---------- Álbumes de Facebook por vendedor (los arma ~/Desktop/scraper-hotwheels/listar_albumes.mjs) ----------
+const ARCHIVO_VENDEDORES_FB = path.join(CARPETA_SCRAPER, 'vendedores_fb.json'); // { "Alain Rodriguez": "link de su página de Álbumes" }
+const CARPETA_ALBUMES_FB = path.join(CARPETA_SCRAPER, 'albumes_fb');
+let cacheFotosFb = { clave: '', mapa: new Map() };
+/** fbid de cada foto ya procesada → álbum (solo álbumes guardados en el maestro). Se rehace solo cuando cambian debug/ o el maestro. */
+function fotosProcesadasFb() {
+  const carpeta = path.join(CARPETA_SCRAPER, 'debug');
+  let clave;
+  try { clave = `${fs.statSync(carpeta).mtimeMs}|${fs.statSync(ARCHIVO_MAESTRO).mtimeMs}`; } catch { return new Map(); }
+  if (cacheFotosFb.clave === clave) return cacheFotosFb.mapa;
+  const guardados = new Set(leerJson(ARCHIVO_MAESTRO, { albumes: [] }).albumes || []);
+  const mapa = new Map();
+  for (const n of fs.readdirSync(carpeta)) {
+    const m = n.match(/^(.+)_foto_\d{3}\.json$/);
+    if (!m || !guardados.has(m[1])) continue; // las pruebas de 3 fotos no cuentan
+    const id = idsDeLink(leerJson(path.join(carpeta, n), {}).url).fbid;
+    if (id) mapa.set(id, m[1]);
+  }
+  cacheFotosFb = { clave, mapa };
+  return mapa;
+}
+/** ¿Qué álbum procesado tiene estas fotos? El que más comparta. */
+function coincidenciaFb(fbids, procesadas) {
+  const votos = {};
+  for (const id of fbids || []) {
+    const a = procesadas.get(id);
+    if (a) votos[a] = (votos[a] || 0) + 1;
+  }
+  return Object.entries(votos).sort((x, y) => y[1] - x[1])[0]?.[0] || null;
+}
+/** Pendientes de cada vendedor según su lista de Facebook, revisando AHORA qué ya está procesado. */
+function listasFacebook() {
+  const vendedores = leerJson(ARCHIVO_VENDEDORES_FB, {});
+  const procesadas = fotosProcesadasFb();
+  return Object.keys(vendedores).map((vendedor) => {
+    const datos = leerJson(path.join(CARPETA_ALBUMES_FB, `${slug(vendedor)}.json`), null);
+    if (!datos) return { vendedor, sinLista: true };
+    const albumes = (datos.albumes || []).slice().sort((x, y) => (x.orden ?? 1e9) - (y.orden ?? 1e9));
+    const carritos = albumes.filter((a) => !a.ignorado).map((a) => ({ ...a, procesado: coincidenciaFb(a.fotosIds, procesadas) }));
+    const idx = carritos.map((a, i) => (a.procesado ? i : -1)).filter((i) => i >= 0);
+    const primero = idx.length ? idx[0] : carritos.length;
+    const ultimo = idx.length ? idx[idx.length - 1] : -1;
+    const corto = (a) => ({ id: a.id, titulo: a.titulo, fotos: a.fotos ?? null, fecha: a.fecha || null, link: a.primeraFoto || null });
+    const atras = carritos.filter((a, i) => !a.procesado && i > ultimo);
+    return {
+      vendedor,
+      actualizado: datos.actualizado || null,
+      parcial: !!datos.parcial,
+      ignorados: albumes.length - carritos.length,
+      procesados: idx.length,
+      nuevos: carritos.filter((a, i) => !a.procesado && i < primero).map(corto),
+      huecos: carritos.filter((a, i) => !a.procesado && i > primero && i < ultimo).map(corto),
+      haciaAtras: atras.slice(0, 40).map(corto),
+      totalAtras: atras.length,
+    };
+  });
+}
+
+/** Corre listar_albumes.mjs de un vendedor (usa la misma sesión de Facebook que los álbumes: uno a la vez). */
+function correrLista(vendedor) {
+  Object.assign(trabajo, { activo: true, tipo: 'lista', lineas: [], album: `Lista de álbumes de ${vendedor}`, vendedor, prueba: false, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
+  const agregar = (texto) => {
+    for (const l of String(texto).split(/\r?\n|\r/)) {
+      if (!l.trim()) continue;
+      trabajo.lineas.push(l.trimEnd());
+      if (/pide login|No veo la foto/i.test(l)) trabajo.esperandoLogin = true;
+    }
+    if (trabajo.lineas.length > 800) trabajo.lineas.splice(0, trabajo.lineas.length - 800);
+  };
+  agregar(`$ node listar_albumes.mjs "${vendedor}"`);
+  proceso = spawn(process.execPath, [path.join(CARPETA_SCRAPER, 'listar_albumes.mjs'), vendedor], { cwd: CARPETA_SCRAPER, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  proceso.stdout.on('data', agregar);
+  proceso.stderr.on('data', agregar);
+  proceso.on('close', (codigo) => {
+    Object.assign(trabajo, { codigo, activo: false, esperandoLogin: false, fin: new Date().toISOString() });
+    proceso = null;
+  });
+}
+
+// ---------- Preguntas y reglas de precios (módulo reglas.mjs del scraper: ahí viven los datos) ----------
+let reglasMod = null;
+try { reglasMod = await import(pathToFileURL(path.join(CARPETA_SCRAPER, 'reglas.mjs')).href); }
+catch (e) { console.log(`(aviso) Sin módulo de reglas de precios: ${e.message}`); }
+const nombreVendedor = (s) => historialAlbumes().vendedores.find((v) => slug(v) === s) || s;
+function datosReglas() {
+  if (!reglasMod) return { dudas: [], reglas: [], significados: {} };
+  const reglas = reglasMod.cargarReglas().reglas;
+  const conNombres = (r) => ({ ...r, nombres: (r.vendedores || []).map((v) => (v === '*' ? 'todos' : nombreVendedor(v))) });
+  const dudas = reglasMod.leerDudas().map((d) => ({
+    ...d,
+    nombre: nombreVendedor(d.vendedor),
+    ejemplos: (d.ejemplos || []).map((e) => {
+      const base = `${e.album}_foto_${String(e.foto).padStart(3, '0')}`;
+      const archivo = ['.jpg', '.png'].map((x) => base + x).find((n) => fs.existsSync(path.join(CARPETA_SCRAPER, 'fotos_hotwheels', n))) || null;
+      return { ...e, archivo };
+    }),
+    // lo que contestaste para esa misma frase con otros vendedores: solo se sugiere, no se aplica
+    sugerencias: reglas.filter((r) => r.frase === d.frase).map(conNombres),
+  }));
+  return { dudas, reglas: reglas.map(conNombres), significados: reglasMod.SIGNIFICADOS };
+}
+/** Rehace álbumes con las reglas de hoy (modo "corregir" del scraper: usa lo ya leído, sin volver a pagar), uno tras otro. */
+function correrCorregir(albumes) {
+  Object.assign(trabajo, { activo: true, tipo: 'corregir', lineas: [], album: `Aplicando tu regla a ${albumes.length} ${albumes.length === 1 ? 'álbum' : 'álbumes'}`, vendedor: '', prueba: false, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
+  const agregar = (texto) => {
+    for (const l of String(texto).split(/\r?\n|\r/)) if (l.trim()) trabajo.lineas.push(l.trimEnd());
+    if (trabajo.lineas.length > 800) trabajo.lineas.splice(0, trabajo.lineas.length - 800);
+  };
+  const cola = [...albumes];
+  let peor = 0;
+  const siguiente = () => {
+    const album = cola.shift();
+    if (!album) {
+      try {
+        const r = recargarBase();
+        trabajo.base = { precios: r.base.length, modelos: buscador.totalModelos };
+        agregar(`Base actualizada: ${r.base.length} precios. Recarga la página para ver los precios nuevos.`);
+      } catch (e) { agregar(`[X] No pude actualizar la base: ${e.message}`); }
+      Object.assign(trabajo, { codigo: peor, activo: false, fin: new Date().toISOString() });
+      proceso = null;
+      return;
+    }
+    agregar(`$ node extraer_album.mjs corregir ${album}`);
+    proceso = spawn(process.execPath, [path.join(CARPETA_SCRAPER, 'extraer_album.mjs'), 'corregir', album], { cwd: CARPETA_SCRAPER, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    proceso.stdout.on('data', agregar);
+    proceso.stderr.on('data', agregar);
+    proceso.on('close', (codigo) => { if (codigo) { peor = codigo; cola.length = 0; } siguiente(); });
+  };
+  siguiente();
+}
+/** Después de guardar una regla: quita las dudas contestadas y corrige (sin costo) los álbumes guardados donde salieron. */
+function aplicarRespuesta({ frase, vendedor }) {
+  const guardados = new Set(leerJson(ARCHIVO_MAESTRO, { albumes: [] }).albumes || []);
+  const albumes = reglasMod.quitarDudas({ frase, vendedor }).filter((a) => guardados.has(a));
+  if (albumes.length) correrCorregir(albumes);
+  return albumes.length;
+}
+
+// Un solo álbum a la vez
+const trabajo = { activo: false, tipo: null, lineas: [], album: '', prueba: false, inicio: null, fin: null, codigo: null, costo: null, esperandoLogin: false, base: null };
+let proceso = null;
+
+function correrAlbum({ url, vendedor, fecha, prueba, nombreForzado }) {
+  const [anio, mes, dia] = String(fecha).split('-').map(Number);
+  // nombreForzado: el link ya era de un álbum guardado, así que se reemplaza ese mismo (no se crea una copia con otro nombre)
+  const nombre = nombreForzado || `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
+  const args = [path.join(CARPETA_SCRAPER, 'extraer_album.mjs'), prueba ? '3' : '0', url, ...(prueba ? [] : [nombre])];
+  Object.assign(trabajo, { activo: true, tipo: 'album', lineas: [], album: nombre, vendedor, prueba, inicio: new Date().toISOString(), fin: null, codigo: null, costo: null, esperandoLogin: false, base: null });
+  const agregar = (texto) => {
+    for (const l of String(texto).split(/\r?\n/)) {
+      if (!l.trim()) continue;
+      trabajo.lineas.push(l);
+      if (/No veo la foto/i.test(l)) trabajo.esperandoLogin = true;
+      const c = l.match(/costo estimado ≈ \$([\d.]+) MXN/);
+      if (c) trabajo.costo = Number(c[1]);
+    }
+    if (trabajo.lineas.length > 800) trabajo.lineas.splice(0, trabajo.lineas.length - 800);
+  };
+  agregar(`$ node extraer_album.mjs ${prueba ? '3' : '0'} "${url}"${prueba ? '' : ' ' + nombre}`);
+  proceso = spawn(process.execPath, args, { cwd: CARPETA_SCRAPER, env: { ...process.env, VENDEDOR: slug(vendedor) }, stdio: ['pipe', 'pipe', 'pipe'] });
+  proceso.stdout.on('data', agregar);
+  proceso.stderr.on('data', agregar);
+  proceso.on('close', (codigo) => {
+    trabajo.codigo = codigo;
+    if (!prueba && codigo === 0) {
+      try {
+        const r = recargarBase();
+        trabajo.base = { precios: r.base.length, modelos: buscador.totalModelos };
+        agregar(`Base actualizada: ${r.base.length} precios. Recarga la página para ver los precios nuevos.`);
+      } catch (e) {
+        agregar(`[X] No pude actualizar la base: ${e.message}`);
+      }
+    }
+    trabajo.activo = false;
+    trabajo.esperandoLogin = false;
+    trabajo.fin = new Date().toISOString();
+    proceso = null;
+  });
+  return nombre;
+}
+
+// ---------- acceso desde otros aparatos (iPhone) ----------
+const esLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+function tienePin(req) {
+  if (esLocal(req)) return true;
+  if (!PIN) return false;
+  const cookie = String(req.headers.cookie || '');
+  return cookie.split(/;\s*/).some((c) => c === `carritos=${HUELLA_PIN}`);
+}
+const intentos = new Map(); // IP → {n, desde}
+function demasiadosIntentos(ip) {
+  const ahora = Date.now();
+  const r = intentos.get(ip) || { n: 0, desde: ahora };
+  if (ahora - r.desde > 60_000) { r.n = 0; r.desde = ahora; }
+  r.n++;
+  intentos.set(ip, r);
+  return r.n > 5;
+}
+const PAGINA_PIN = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carritos · PIN</title><style>body{font:16px -apple-system,system-ui,sans-serif;background:#f5f5f4;display:grid;place-items:center;min-height:100vh;margin:0}
+form{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:24px;width:min(320px,90vw)}h1{font-size:20px;margin:0 0 12px}
+input,button{font:inherit;width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #d6d3d1;margin-top:8px}
+button{background:#1c1917;color:#fff;border:0}p{color:#b91c1c;min-height:1.2em;margin:8px 0 0;font-size:14px}</style></head>
+<body><form id="f"><h1>Carritos · Precios</h1><input id="pin" type="password" inputmode="numeric" placeholder="PIN" autofocus><button>Entrar</button><p id="e"></p></form>
+<script>document.getElementById('f').onsubmit=async(ev)=>{ev.preventDefault();const r=await fetch('/api/entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:document.getElementById('pin').value})});
+if(r.ok)location.reload();else document.getElementById('e').textContent=(await r.json()).error||'PIN incorrecto';};</script></body></html>`;
+
+// ---------- servidor ----------
+function leerCuerpo(req) {
+  return new Promise((resolve, reject) => {
+    let datos = '';
+    req.on('data', (c) => {
+      datos += c;
+      if (datos.length > 100_000) reject(new Error('Petición muy grande'));
+    });
+    req.on('end', () => {
+      try { resolve(datos ? JSON.parse(datos) : {}); } catch (e) { reject(e); }
+    });
+  });
+}
+
+function responder(res, codigo, datos) {
+  res.writeHead(codigo, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(datos));
+}
+
+const TIPOS = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+
+const servidor = http.createServer(async (req, res) => {
+  const url = new URL(req.url, `http://localhost:${PUERTO}`);
+  try {
+    // --- Protección: solo esta página puede mandar órdenes (no otra página web abierta en el navegador) ---
+    if (req.method === 'POST') {
+      const origen = req.headers.origin;
+      const tipo = String(req.headers['content-type'] || '');
+      if ((origen && new URL(origen).host !== req.headers.host) || !tipo.startsWith('application/json')) {
+        return responder(res, 403, { error: 'Petición no permitida' });
+      }
+    }
+
+    // --- PIN (solo fuera de la Mac) ---
+    if (req.method === 'POST' && url.pathname === '/api/entrar') {
+      if (!PIN) return responder(res, 403, { error: 'No hay PIN configurado (UPLOAD_PIN en .dev.vars)' });
+      if (demasiadosIntentos(req.socket.remoteAddress)) return responder(res, 429, { error: 'Demasiados intentos, espera un minuto' });
+      const { pin } = await leerCuerpo(req);
+      if (String(pin || '') !== PIN) return responder(res, 401, { error: 'PIN incorrecto' });
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Set-Cookie': `carritos=${HUELLA_PIN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${60 * 60 * 24 * 30}`,
+      });
+      return res.end('{"ok":true}');
+    }
+    if (!tienePin(req)) {
+      if (req.method === 'GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/foto/') && !url.pathname.startsWith('/fotoalbum/') && !url.pathname.startsWith('/pantalla/')) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(PAGINA_PIN);
+      }
+      return responder(res, 401, { error: 'Falta el PIN' });
+    }
+
+    // --- álbumes ---
+    if (req.method === 'GET' && url.pathname === '/api/albumes') {
+      return responder(res, 200, historialAlbumes());
+    }
+
+    // --- filas "por revisar" de TODOS los álbumes (lee el maestro, no la base) ---
+    if (req.method === 'GET' && url.pathname === '/api/porrevisar') {
+      const filas = listarPorRevisar({ carpetaScraper: CARPETA_SCRAPER, carpetaSalida: SALIDA, minimo: PRECIO_MINIMO_BASE });
+      const pendientes = filas.filter((f) => !f.decision && !f.bajo).length;
+      return responder(res, 200, { filas, pendientes });
+    }
+    // Foto de una fila (también las que no están en la base). Solo nombres simples de la carpeta de fotos.
+    if (req.method === 'GET' && url.pathname.startsWith('/fotoalbum/')) {
+      const nombre = decodeURIComponent(url.pathname.slice('/fotoalbum/'.length));
+      const archivo = path.join(CARPETA_SCRAPER, 'fotos_hotwheels', nombre);
+      if (!/^[\w.-]+\.(jpe?g|png|webp)$/i.test(nombre) || !fs.existsSync(archivo)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(archivo).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'private, max-age=3600' });
+      return fs.createReadStream(archivo).pipe(res);
+    }
+    // Captura de pantalla de Facebook de una foto (carpeta debug del scraper). Solo nombres simples "<album>_foto_NNN_pantalla.png".
+    if (req.method === 'GET' && url.pathname.startsWith('/pantalla/')) {
+      const nombre = decodeURIComponent(url.pathname.slice('/pantalla/'.length));
+      const archivo = path.join(CARPETA_SCRAPER, 'debug', nombre);
+      if (!/^[\w.-]+_foto_\d{3}_pantalla\.png$/.test(nombre) || !fs.existsSync(archivo)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=3600' });
+      return fs.createReadStream(archivo).pipe(res);
+    }
+    // Decisión sobre una fila: revisada | descartada | corregida | deshacer. Se guarda en scripts/salida/revision-fotos.json
+    if (req.method === 'POST' && url.pathname === '/api/revision') {
+      const { clave, accion, cambios } = await leerCuerpo(req);
+      const acciones = ['revisada', 'descartada', 'corregida', 'deshacer'];
+      if (!acciones.includes(accion)) return responder(res, 400, { error: 'Acción no válida' });
+      const maestro = leerJson(ARCHIVO_MAESTRO, { filas: [] });
+      const fila = (maestro.filas || []).find((f) => f.revisar && claveFila(f) === clave);
+      if (!fila) return responder(res, 404, { error: 'No encuentro esa fila entre las de "por revisar" (¿se volvió a correr el álbum?)' });
+      const archivo = path.join(SALIDA, ARCHIVO_REVISION);
+      const revision = leerRevision(SALIDA);
+      if (accion === 'deshacer') {
+        delete revision[clave];
+      } else {
+        const decision = { accion, fecha: new Date().toISOString() };
+        if (accion === 'corregida') {
+          const c = cambios || {};
+          const texto = (v, max) => String(v ?? '').trim().slice(0, max);
+          const modelo = texto(c.modelo, 120);
+          if (!modelo || modelo.startsWith('(')) return responder(res, 400, { error: 'Falta el nombre del modelo' });
+          const precio = c.precio === '' || c.precio == null ? null : Number(c.precio);
+          if (precio != null && (!Number.isFinite(precio) || precio <= 0 || precio > 100000)) return responder(res, 400, { error: 'Precio inválido' });
+          decision.cambios = { modelo, serie: texto(c.serie, 120), numero: texto(c.numero, 20), precio };
+          decision.antes = { modelo: fila.modelo || '', serie: fila.serie || '', numero: fila.numero || '', precio: typeof fila.precioUnitario === 'number' ? fila.precioUnitario : null };
+        }
+        revision[clave] = decision;
+      }
+      escribirJson(archivo, revision);
+      baseDesactualizada = true;
+      console.log(`  Revisión: ${accion} → ${clave}`);
+      return responder(res, 200, { ok: true });
+    }
+    // Vuelve a armar la base con las decisiones (la página lo pide al cerrar la vista "Por revisar")
+    if (req.method === 'POST' && url.pathname === '/api/revision/aplicar') {
+      if (trabajo.activo) return responder(res, 409, { error: 'Hay un álbum procesándose; aplica los cambios cuando termine' });
+      if (baseDesactualizada) { recargarBase(); baseDesactualizada = false; }
+      return responder(res, 200, { ok: true, precios: base.length });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/album') {
+      const { url: link, vendedor, fecha, prueba, confirmarRepetido } = await leerCuerpo(req);
+      if (trabajo.activo) return responder(res, 409, { error: `Ya se está procesando "${trabajo.album}"` });
+      if (!/^https:\/\/((www|web|m)\.)?facebook\.com\/photo/i.test(String(link || ''))) return responder(res, 400, { error: 'El link debe ser de una foto de Facebook (facebook.com/photo...)' });
+      if (!String(vendedor || '').trim()) return responder(res, 400, { error: 'Falta el vendedor' });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) return responder(res, 400, { error: 'Falta la fecha del álbum' });
+      if (!fs.existsSync(path.join(CARPETA_SCRAPER, 'extraer_album.mjs'))) return responder(res, 500, { error: `No encuentro el scraper en ${CARPETA_SCRAPER}` });
+      if (!process.env.GEMINI_API_KEY) return responder(res, 500, { error: 'Falta GEMINI_API_KEY: abre la página con la app "Precios Carritos" o desde una terminal' });
+      const [, mes, dia] = fecha.split('-').map(Number);
+      const nombreBase = `${slug(vendedor)}-${MESES_CORTOS[mes - 1]}${dia}`;
+      // El LINK es lo que identifica al álbum. ¿Ya es de un álbum guardado? (aunque la fecha o el vendedor escritos sean otros).
+      // Una prueba de 3 fotos no guarda nada.
+      const igual = prueba ? null : albumPorLink(link);
+      if (igual && !confirmarRepetido) {
+        return responder(res, 409, {
+          repetido: true,
+          error: `Ese link ya está procesado como "${igual.nombre}" (${igual.filas} filas). Si lo vuelves a correr, se reemplaza ese álbum (y se vuelve a pagar Gemini).`,
+        });
+      }
+      // Mismo link = se reemplaza ese álbum con su nombre. Link distinto = álbum nuevo: si el nombre ya lo tiene otro álbum
+      // (el mismo vendedor publicó dos ese día), se le agrega el número: alain-rodriguez-oct25-2, -3… Nunca reemplaza a otro álbum.
+      const nombre = igual ? igual.nombre : prueba ? nombreBase : nombreLibre(nombreBase);
+      const vendedorFinal = igual ? leerAlbum(igual.nombre).vendedor : vendedor.trim();
+      if (!igual) {
+        const vendedores = leerJson(ARCHIVO_VENDEDORES, []);
+        if (!vendedores.includes(vendedorFinal)) escribirJson(ARCHIVO_VENDEDORES, [...vendedores, vendedorFinal]);
+      }
+      const album = correrAlbum({ url: link, vendedor: vendedorFinal, fecha: igual?.fecha || fecha, prueba: !!prueba, nombreForzado: nombre });
+      return responder(res, 200, { album, numerado: !igual && !prueba && nombre !== nombreBase });
+    }
+    // ¿Este link ya está procesado? (la página lo consulta mientras pegas el link)
+    if (req.method === 'GET' && url.pathname === '/api/album/link') {
+      const igual = albumPorLink(url.searchParams.get('url') || '');
+      return responder(res, 200, { album: igual });
+    }
+    // Preguntas del scraper (frases junto a un precio que no conoce) y tus reglas
+    if (req.method === 'GET' && url.pathname === '/api/reglas') {
+      return responder(res, 200, datosReglas());
+    }
+    if (req.method === 'POST' && ['/api/reglas/responder', '/api/reglas/activar', '/api/reglas/borrar'].includes(url.pathname)) {
+      if (!reglasMod) return responder(res, 500, { error: `No encuentro reglas.mjs en ${CARPETA_SCRAPER}` });
+      const { frase, significado, vendedor } = await leerCuerpo(req);
+      if (url.pathname.endsWith('/borrar')) {
+        reglasMod.borrarRegla({ frase, significado, vendedor });
+        return responder(res, 200, { ok: true });
+      }
+      // responder = para el vendedor de la duda; activar = para otro vendedor o para todos ("*")
+      if (trabajo.activo) return responder(res, 409, { error: `Espera a que termine "${trabajo.album}" para aplicar la regla` });
+      reglasMod.activarRegla({ frase, significado, vendedor });
+      return responder(res, 200, { ok: true, corrigiendo: aplicarRespuesta({ frase, vendedor }) });
+    }
+    // Álbumes de Facebook pendientes por vendedor (listas de listar_albumes.mjs)
+    if (req.method === 'GET' && url.pathname === '/api/facebook/pendientes') {
+      return responder(res, 200, { listas: listasFacebook() });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/facebook/actualizar') {
+      const { vendedor } = await leerCuerpo(req);
+      if (trabajo.activo) return responder(res, 409, { error: `Ya se está procesando "${trabajo.album}"` });
+      if (!leerJson(ARCHIVO_VENDEDORES_FB, {})[vendedor]) return responder(res, 400, { error: `${vendedor} no tiene link de Álbumes en vendedores_fb.json` });
+      if (!fs.existsSync(path.join(CARPETA_SCRAPER, 'listar_albumes.mjs'))) return responder(res, 500, { error: `No encuentro listar_albumes.mjs en ${CARPETA_SCRAPER}` });
+      correrLista(vendedor);
+      return responder(res, 200, { ok: true });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/album/estado') {
+      const desde = Number(url.searchParams.get('desde') || 0);
+      return responder(res, 200, { ...trabajo, total: trabajo.lineas.length, lineas: trabajo.lineas.slice(desde) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/album/continuar') {
+      if (proceso) { proceso.stdin.end('\n'); trabajo.esperandoLogin = false; } // el scraper solo pregunta una vez
+      return responder(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/album/detener') {
+      if (proceso) proceso.kill('SIGINT'); // el scraper guarda lo que lleve
+      return responder(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/apagar') {
+      if (!esLocal(req)) return responder(res, 403, { error: 'Solo se puede apagar desde la Mac' });
+      if (trabajo.activo) return responder(res, 409, { error: trabajo.tipo === 'lista' ? 'Se está actualizando la lista de álbumes; espera a que termine' : 'Hay un álbum procesándose; espera a que termine' });
+      responder(res, 200, { ok: true });
+      console.log('Apagado desde la página.');
+      setTimeout(() => process.exit(0), 300);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(path.join(CARPETA, 'revisar.html')));
+    }
+
+    // Botón "🔄 Traer productos nuevos": vuelve a leer tus productos de Sanity sin apagar la página
+    if (req.method === 'POST' && url.pathname === '/api/productos/recargar') {
+      const antes = new Set(productos.map((p) => p._id));
+      productos = await leerProductos();
+      indexarProductos();
+      const nuevos = productos.filter((p) => !antes.has(p._id)).length;
+      const quitados = [...antes].filter((id) => !porId.has(id)).length;
+      console.log(`  Productos recargados: ${productos.length} (${nuevos} nuevos, ${quitados} ya no están)`);
+      return responder(res, 200, { ok: true, total: productos.length, nuevos, quitados });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/datos') {
+      return responder(res, 200, {
+        productos: productos.map(paraNavegador),
+        base: { precios: buscador.totalAvistamientos, modelos: buscador.totalModelos },
+        vendedores: [...new Set(base.map((a) => a.vendedor))],
+        aprendidos: Object.keys(equiv.aprendidos).length,
+        version: versionBase,
+        local: esLocal(req),
+        iphone: esLocal(req) && PIN
+          ? Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `http://${i.address}:${PUERTO}`)
+          : [],
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname.startsWith('/foto/')) {
+      const a = base[Number(url.pathname.slice(6))];
+      if (!a?.archivoFoto || !fs.existsSync(a.archivoFoto)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, {
+        'Content-Type': TIPOS[path.extname(a.archivoFoto).toLowerCase()] || 'application/octet-stream',
+        'Cache-Control': 'private, max-age=3600', // la página pide /foto/N?v=<versión de la base>
+      });
+      return fs.createReadStream(a.archivoFoto).pipe(res);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/buscar') {
+      const q = url.searchParams.get('q') || '';
+      const id = url.searchParams.get('id') || '';
+      const encontrados = buscador.buscar(q, {
+        rechazados: [...(equiv.confirmados[id] || []), ...(equiv.rechazados[id] || [])],
+        max: 8,
+        minimo: 0.3,
+        aprendidos: equiv.aprendidos,
+      });
+      return responder(res, 200, { candidatos: preparar(encontrados, id) });
+    }
+
+    // Decisión sobre una coincidencia completa
+    if (req.method === 'POST' && url.pathname === '/api/equivalencia') {
+      const { id, key, accion, score } = await leerCuerpo(req);
+      const p = porId.get(id);
+      if (!p || !key) return responder(res, 400, { error: 'Producto o modelo inválido' });
+      const conf = new Set(equiv.confirmados[id] || []);
+      const rech = new Set(equiv.rechazados[id] || []);
+      conf.delete(key);
+      rech.delete(key);
+      if (accion === 'confirmar') conf.add(key);
+      if (accion === 'rechazar') rech.add(key);
+      equiv.confirmados[id] = [...conf];
+      equiv.rechazados[id] = [...rech];
+      if (accion === 'confirmar' || accion === 'rechazar') registrar(p, key, accion === 'confirmar' ? 'si' : 'no', score);
+      if (accion === 'confirmar') aprender(p, key);
+      escribirJson(ARCHIVO_EQUIV, equiv);
+      return responder(res, 200, { producto: paraNavegador(p) });
+    }
+
+    // Decisión sobre una sola foto de una coincidencia
+    if (req.method === 'POST' && url.pathname === '/api/foto') {
+      const { id, key, clave, accion, score } = await leerCuerpo(req);
+      const p = porId.get(id);
+      if (!p || !key || !clave) return responder(res, 400, { error: 'Datos incompletos' });
+      const si = new Set(equiv.fotosSi[id] || []);
+      const no = new Set(equiv.fotosNo[id] || []);
+      const ver = new Set(equiv.fotosVersion[id] || []);
+      si.delete(clave);
+      no.delete(clave);
+      ver.delete(clave);
+      if (accion === 'si') {
+        si.add(clave);
+        confirmarGrupo(id, key);
+        registrar(p, key, 'si-foto', score);
+        aprender(p, key);
+      }
+      if (accion === 'no') {
+        no.add(clave);
+        registrar(p, key, 'no-foto', score);
+      }
+      // Otra versión: es el mismo carrito pero de otro color o año. Solo sirve de idea; no confirma ni enseña.
+      if (accion === 'version') {
+        ver.add(clave);
+        registrar(p, key, 'version-foto', score);
+      }
+      equiv.fotosVersion[id] = [...ver];
+      equiv.fotosSi[id] = [...si];
+      equiv.fotosNo[id] = [...no];
+      escribirJson(ARCHIVO_EQUIV, equiv);
+      return responder(res, 200, { producto: paraNavegador(p) });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/precio') {
+      const { id, precio } = await leerCuerpo(req);
+      const p = porId.get(id);
+      const valor = Number(precio);
+      if (!p) return responder(res, 400, { error: 'Producto no encontrado' });
+      if (!Number.isFinite(valor) || valor <= 0) return responder(res, 400, { error: 'Precio inválido' });
+      await client.patch(id).set({ precio: valor }).commit();
+      const anterior = p.precio ?? null;
+      p.precio = valor;
+      estado[id] = { estado: 'guardado', precioAnterior: anterior, precio: valor, fecha: new Date().toISOString(), albumes: albumesActuales() };
+      escribirJson(ARCHIVO_ESTADO, estado);
+      console.log(`  Guardado: ${p.titulo}: ${anterior ?? 'sin precio'} → $${valor}`);
+      return responder(res, 200, { producto: paraNavegador(p) });
+    }
+
+    // Novedades vistas: dejas tu precio igual y ya no sale en "Novedades"
+    if (req.method === 'POST' && url.pathname === '/api/visto') {
+      const { id } = await leerCuerpo(req);
+      const p = porId.get(id);
+      if (!p || estado[id]?.estado !== 'guardado') return responder(res, 400, { error: 'Producto no encontrado' });
+      estado[id].albumes = albumesActuales();
+      estado[id].visto = new Date().toISOString();
+      escribirJson(ARCHIVO_ESTADO, estado);
+      return responder(res, 200, { producto: paraNavegador(p) });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/estado') {
+      const { id, valor } = await leerCuerpo(req);
+      const p = porId.get(id);
+      if (!p) return responder(res, 400, { error: 'Producto no encontrado' });
+      if (valor) estado[id] = { estado: valor, fecha: new Date().toISOString() };
+      else delete estado[id];
+      escribirJson(ARCHIVO_ESTADO, estado);
+      return responder(res, 200, { producto: paraNavegador(p) });
+    }
+
+    res.writeHead(404);
+    res.end();
+  } catch (e) {
+    console.error('  [X]', e.message);
+    responder(res, 500, { error: e.message });
+  }
+});
+
+/** Qué tanto aciertan las coincidencias según su puntaje (para calibrar el motor). */
+function estadisticas() {
+  const d = equiv.decisiones.filter((x) => typeof x.score === 'number' && x.score < 100);
+  if (d.length < 5) return '';
+  const rangos = [[80, 100], [60, 79], [40, 59]];
+  return rangos
+    .map(([a, b]) => {
+      const r = d.filter((x) => x.score >= a && x.score <= b);
+      if (!r.length) return null;
+      const si = r.filter((x) => x.decision.startsWith('si')).length;
+      return `${a}-${b}%: aceptas ${Math.round((si / r.length) * 100)}% (${r.length})`;
+    })
+    .filter(Boolean)
+    .join(' · ');
+}
+
+servidor.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    // Ya estaba abierta (p. ej. se abrió la app dos veces): solo abre el navegador
+    console.log(`La página ya estaba abierta en http://localhost:${PUERTO}`);
+    if (ABRIR_NAVEGADOR && process.platform === 'darwin') exec(`open http://localhost:${PUERTO}`);
+    process.exit(0);
+  }
+  throw e;
+});
+
+servidor.listen(PUERTO, PIN ? '0.0.0.0' : '127.0.0.1', () => {
+  const conPrecio = productos.filter((p) => p.precio).length;
+  console.log(`\nProductos: ${productos.length} (${conPrecio} con precio, ${productos.length - conPrecio} sin precio)`);
+  for (const [d, n] of Object.entries(conteo)) console.log(`  ${d}: ${n}`);
+  console.log(`Base: ${buscador.totalAvistamientos} precios de ${buscador.totalModelos} modelos`);
+  const est = estadisticas();
+  if (est) console.log(`Tus decisiones: ${est}`);
+  if (Object.keys(equiv.aprendidos).length) console.log(`Palabras aprendidas: ${Object.keys(equiv.aprendidos).length}`);
+  console.log(`\nAbierto en http://localhost:${PUERTO}  (Ctrl+C para cerrar)`);
+  const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
+  if (PIN && ips.length) console.log(`Desde tu iPhone (misma red Wi-Fi): ${ips.map((ip) => `http://${ip}:${PUERTO}`).join('  ')}  (pide PIN)`);
+  if (!PIN) console.log('Sin PIN configurado: la página solo abre en esta Mac.');
+  if (ABRIR_NAVEGADOR && process.platform === 'darwin') exec(`open http://localhost:${PUERTO}`);
+});

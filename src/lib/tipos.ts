@@ -9,6 +9,13 @@ export interface DepartamentoConConteo {
   totalSinPrecio: number;
 }
 
+/** Una foto de la galería, como la devuelven los endpoints del panel. */
+export interface FotoGaleria {
+  /** _key de la foto dentro del array galeria; es con lo que se quita. */
+  llave: string;
+  url: string;
+}
+
 /** Forma que devuelven productos-sin-precio.ts y buscar-productos.ts, y que consume inventario.astro. */
 export interface ProductoParaAdmin {
   _id: string;
@@ -25,7 +32,10 @@ export interface ProductoParaAdmin {
   /** _id de la categoría actual y su departamento (slug); se usan para mover el producto. */
   categoriaId?: string;
   departamento?: string;
+  /** Texto alternativo de la foto (SEO/accesibilidad); lo genera Gemini al subir y se puede editar a mano. */
+  altTexto?: string;
   imagenUrl: string | null;
+  galeria?: FotoGaleria[];
 }
 
 /** Lo que se guarda por cada término buscado en el catálogo (registrar-busqueda.ts). */

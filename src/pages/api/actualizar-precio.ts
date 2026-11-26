@@ -16,9 +16,10 @@ export const POST: APIRoute = async ({ request }) => {
       mostrarExistencias?: boolean;
       agotado?: boolean;
       titulo?: string;
+      altTexto?: string;
       slug?: string;
     };
-    const { id, precio, cantidad, marca, palabrasClave, mostrarExistencias, agotado, titulo, slug } = datos;
+    const { id, precio, cantidad, marca, palabrasClave, mostrarExistencias, agotado, titulo, altTexto, slug } = datos;
 
     if (!id) {
       return jsonError('Falta id');
@@ -45,6 +46,11 @@ export const POST: APIRoute = async ({ request }) => {
     }
     if (typeof titulo === 'string' && titulo.trim()) {
       cambios.titulo = titulo.trim().slice(0, 200);
+    }
+    // El alt describe la foto. Se guarda aunque venga vacío: así se puede borrar
+    // uno que quedó describiendo una foto que ya se cambió.
+    if (typeof altTexto === 'string') {
+      cambios.altTexto = altTexto.trim().slice(0, 300);
     }
     // El slug es la dirección de la ficha: hgstoremx.com/productos/<slug>/.
     // Cambiarlo rompe el enlace viejo (queda 404), así que solo se toca a propósito,

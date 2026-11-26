@@ -1,7 +1,7 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
 import imageUrlBuilder from '@sanity/image-url';
-import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
+import { galeriaParaPantalla, jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
 import type { ProductoParaAdmin } from '../../lib/tipos';
 
 export const GET: APIRoute = async ({ request, url }) => {
@@ -34,7 +34,9 @@ export const GET: APIRoute = async ({ request, url }) => {
         palabrasClave,
         mostrarExistencias,
         agotado,
+        altTexto,
         imagenPrincipal,
+        galeria,
         "categoriaTitulo": categoria->titulo,
         "categoriaId": categoria._ref,
         "departamento": categoria->departamento
@@ -55,7 +57,9 @@ export const GET: APIRoute = async ({ request, url }) => {
       categoriaTitulo: p.categoriaTitulo,
       categoriaId: p.categoriaId,
       departamento: p.departamento,
+      altTexto: p.altTexto,
       imagenUrl: p.imagenPrincipal ? urlFor(p.imagenPrincipal).width(200).auto('format').url() : null,
+      galeria: galeriaParaPantalla(p.galeria, urlFor),
     }));
 
     return jsonOk(productosConImagen);

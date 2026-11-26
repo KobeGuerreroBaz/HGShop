@@ -28,6 +28,27 @@ function esCodigo(t: string): boolean {
   return t.length >= 4 && /[a-z]/.test(t) && /\d/.test(t);
 }
 
+// Escalas, que NO identifican nada: todos los 1:64 del mundo son 1:64.
+const ESCALAS = new Set(['1/64', '1/50', '1/43', '1/24', '1/18', '1/87', '1/12']);
+
+/**
+ * Numeros de coleccion del empaque: "157/250", "60/100".
+ * tokens() los borra antes de comparar, pero son lo UNICO que identifica a carritos cuyo nombre
+ * es puro generico: "'17 Ford GT Azul HW Turbo" no tiene ni una palabra propia (ford es marca,
+ * 2017 es año, gt y turbo son genericos), y por eso un duplicado real se colaba sin aviso.
+ * Dos castings distintos no comparten el mismo numero dentro de la misma serie.
+ */
+function numerosDeColeccion(texto: string): string[] {
+  const salida = new Set<string>();
+  for (const m of String(texto || '').matchAll(/\b(\d{1,3})\s*\/\s*(\d{2,3})\b/g)) {
+    const par = `${Number(m[1])}/${Number(m[2])}`;
+    if (ESCALAS.has(par)) continue;
+    if (Number(m[2]) < 20) continue; // 5/10, 7/10: posicion dentro de una subserie, muy debil
+    salida.add(par);
+  }
+  return [...salida];
+}
+
 export const POST: APIRoute = async ({ request }) => {
   const bloqueo = await verificarAcceso(request, 'buscar-parecidos');
   if (bloqueo) return bloqueo;
@@ -54,6 +75,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (buscables.length === 0) return jsonOk([]);
 
   const distConsulta = new Set<string>(distintivas(toksConsulta));
+  const numsConsulta = new Set<string>(numerosDeColeccion(`${titulo} ${claves.join(' ')}`));
 
   try {
     const client = sanityClientEscritura();
@@ -82,10 +104,14 @@ export const POST: APIRoute = async ({ request }) => {
         // asi un "Porsche 911 GT3" no arrastra todos los Porsche del catalogo.
         const codigoComun = comunes.find(esCodigo);
         const hayDistintiva = comunes.some((t) => distConsulta.has(t));
-        if (!manual && !codigoComun && !hayDistintiva) return null;
+        const numeroComun = numsConsulta.size
+          ? numerosDeColeccion(`${p.titulo} ${(p.palabrasClave || []).join(' ')}`).find((n) => numsConsulta.has(n))
+          : undefined;
+        if (!manual && !codigoComun && !hayDistintiva && !numeroComun) return null;
 
         let puntaje = comunes.length / toksConsulta.length;
         if (codigoComun) puntaje = Math.min(1, puntaje + 0.5); // el codigo es casi definitivo
+        if (numeroComun) puntaje = Math.min(1, puntaje + 0.4); // mismo numero de coleccion: casi seguro
 
         return {
           _id: p._id,
@@ -99,6 +125,7 @@ export const POST: APIRoute = async ({ request }) => {
           imagenUrl: builder.image(p.imagenPrincipal).width(160).auto('format').url(),
           puntaje: Math.round(puntaje * 100),
           codigoIgual: codigoComun || null,
+          numeroIgual: numeroComun || null,
           coincidencias: comunes,
         };
       })

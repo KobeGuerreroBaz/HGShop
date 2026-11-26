@@ -1,7 +1,7 @@
 export const prerender = false;
 import type { APIRoute } from 'astro';
 import imageUrlBuilder from '@sanity/image-url';
-import { jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
+import { galeriaParaPantalla, jsonError, jsonOk, sanityClientEscritura, verificarAcceso } from '../../lib/api-utils';
 import type { ProductoParaAdmin } from '../../lib/tipos';
 
 export const GET: APIRoute = async ({ request, url }) => {
@@ -31,6 +31,8 @@ export const GET: APIRoute = async ({ request, url }) => {
         palabrasClave,
         mostrarExistencias,
         agotado,
+        altTexto,
+        galeria,
         "categoriaTitulo": categoria->titulo,
         "categoriaId": categoria._ref,
         "departamento": categoria->departamento
@@ -50,9 +52,11 @@ export const GET: APIRoute = async ({ request, url }) => {
       categoriaTitulo: p.categoriaTitulo,
       categoriaId: p.categoriaId,
       departamento: p.departamento,
+      altTexto: p.altTexto,
       // 300px alcanza para la tarjeta de ~130px del grid de 3 columnas en /inventario;
       // .auto('format') deja que Sanity sirva WebP/AVIF en vez del original.
       imagenUrl: p.imagenPrincipal ? urlFor(p.imagenPrincipal).width(300).auto('format').url() : null,
+      galeria: galeriaParaPantalla(p.galeria, urlFor),
     }));
 
     return jsonOk(productosConImagen);
